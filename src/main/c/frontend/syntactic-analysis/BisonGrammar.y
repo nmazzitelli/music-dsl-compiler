@@ -27,56 +27,134 @@ void yyerror(const YYLTYPE * location, const char * message) {}
 	/** Terminals. */
 
 	signed int integer;
+	bool boolean;
+	char * string;
 	TokenLabel token;
 
 	/** Non-terminals. */
 
-	Constant * constant;
+	ChordNoteList * chordNoteList;
+	DurationType duration;
+	Event * event;
+	EventList * eventList;
 	Expression * expression;
-	Factor * factor;
+	GlobalSetting * globalSetting;
+	GlobalSettingList * globalSettingList;
+	ModeType mode;
 	Program * program;
+	Track * track;
+	TrackList * trackList;
+	VarType varType;
 }
 
 /**
- * Destructors. This functions are executed after the parsing ends, so if the
- * AST must be used in the following phases of the compiler you shouldn't used
- * this approach for the AST root node ("program" non-terminal, in this
- * grammar), or it will drop the entire tree even if the parsing succeeds.
+ * Destructors. These functions are executed when a symbol is discarded
+ * (e.g., during error recovery). The program non-terminal is excluded
+ * because the AST must persist after parsing.
  *
  * @see https://www.gnu.org/software/bison/manual/html_node/Destructor-Decl.html
  */
-%destructor { destroyConstant($$); } <constant>
+%destructor { destroyChordNoteList($$); } <chordNoteList>
+%destructor { destroyEvent($$); } <event>
+%destructor { destroyEventList($$); } <eventList>
 %destructor { destroyExpression($$); } <expression>
-%destructor { destroyFactor($$); } <factor>
+%destructor { destroyGlobalSetting($$); } <globalSetting>
+%destructor { destroyGlobalSettingList($$); } <globalSettingList>
+%destructor { destroyTrack($$); } <track>
+%destructor { destroyTrackList($$); } <trackList>
 
-/** Terminals. */
+/** Terminals - literals. */
 %token <integer> INTEGER
+%token <string> STRING
+%token <string> PITCH
+%token <string> NOTE_CLASS
+%token <string> IDENTIFIER
+
+/** Terminals - music keywords. */
+%token <token> TEMPO
+%token <token> TIME_SIGNATURE
+%token <token> KEY
+%token <token> MAJOR
+%token <token> MINOR
+%token <token> TRACK
+%token <token> INSTRUMENT
+%token <token> PLAY
+%token <token> REST
+%token <token> VELOCITY
+%token <token> REPEAT
+%token <token> IF
+%token <token> THEN
+%token <token> ELSE
+
+/** Terminals - type keywords. */
+%token <token> INTEGER_TYPE
+%token <token> BOOLEAN_TYPE
+%token <token> STRING_TYPE
+%token <token> TRUE
+%token <token> FALSE
+
+/** Terminals - logical operators (as keywords). */
+%token <token> AND
+%token <token> OR
+%token <token> NOT
+
+/** Terminals - duration keywords. */
+%token <token> WHOLE
+%token <token> HALF
+%token <token> QUARTER
+%token <token> EIGHTH
+%token <token> SIXTEENTH
+
+/** Terminals - operators. */
 %token <token> ADD
-%token <token> CLOSE_BRACE
-%token <token> CLOSE_COMMENT
-%token <token> CLOSE_PARENTHESIS
-%token <token> DIV
-%token <token> MUL
-%token <token> OPEN_BRACE
-%token <token> OPEN_COMMENT
-%token <token> OPEN_PARENTHESIS
 %token <token> SUB
+%token <token> MUL
+%token <token> DIV
+%token <token> LT
+%token <token> GT
+%token <token> EQ
+%token <token> NEQ
+%token <token> LEQ
+%token <token> GEQ
+
+/** Terminals - punctuation. */
+%token <token> SEMICOLON
+%token <token> OPEN_BRACE
+%token <token> CLOSE_BRACE
+%token <token> OPEN_BRACKET
+%token <token> CLOSE_BRACKET
+%token <token> COMMA
 
 %token <token> IGNORED
 %token <token> UNKNOWN
+%token <token> OPEN_COMMENT
+%token <token> CLOSE_COMMENT
 
 /** Non-terminals. */
-%type <constant> constant
+%type <chordNoteList> chordNoteList
+%type <duration> duration
+%type <event> event
+%type <eventList> eventList
+%type <eventList> optElse
 %type <expression> expression
-%type <factor> factor
+%type <globalSetting> globalSetting
+%type <globalSettingList> globalSettingList
+%type <mode> mode
 %type <program> program
+%type <track> track
+%type <trackList> trackList
+%type <varType> varType
 
 /**
- * Precedence and associativity.
+ * Precedence and associativity (lowest to highest).
  *
  * @see https://en.cppreference.com/w/cpp/language/operator_precedence.html
  * @see https://www.gnu.org/software/bison/manual/html_node/Precedence.html
  */
+%left OR
+%left AND
+%right NOT
+%left LT GT EQ NEQ LEQ GEQ
 %left ADD SUB
 %left MUL DIV
 
@@ -84,21 +162,20 @@ void yyerror(const YYLTYPE * location, const char * message) {}
 
 // IMPORTANT: To use λ in the following grammar, use the %empty symbol.
 
-program: expression											{ $$ = ExpressionProgramSemanticAction($1); }
-	;
+program: globalSettingList trackList					{ $$ = ProgramSemanticAction($1, $2); }
+       ;
 
-expression: expression[left] ADD expression[right]			{ $$ = ArithmeticExpressionSemanticAction($left, $right, ADDITION); }
-	| expression[left] DIV expression[right]				{ $$ = ArithmeticExpressionSemanticAction($left, $right, DIVISION); }
-	| expression[left] MUL expression[right]				{ $$ = ArithmeticExpressionSemanticAction($left, $right, MULTIPLICATION); }
-	| expression[left] SUB expression[right]				{ $$ = ArithmeticExpressionSemanticAction($left, $right, SUBTRACTION); }
-	| factor												{ $$ = FactorExpressionSemanticAction($1); }
-	;
+globalSettingList: globalSettingList globalSetting		{ $$ = AppendGlobalSettingSemanticAction($1, $2); }
+                 | %empty								{ $$ = NULL; }
+                 ;
 
-factor: OPEN_PARENTHESIS expression CLOSE_PARENTHESIS		{ $$ = ExpressionFactorSemanticAction($2); }
-	| constant												{ $$ = ConstantFactorSemanticAction($1); }
-	;
+globalSetting: TEMPO INTEGER SEMICOLON						{ $$ = TempoSettingSemanticAction($2); }
+             | TIME_SIGNATURE INTEGER DIV INTEGER SEMICOLON	{ $$ = TimeSignatureSettingSemanticAction($2, $4); }
+             | KEY NOTE_CLASS mode SEMICOLON				{ $$ = KeySettingSemanticAction($2, $3); }
+             ;
 
-constant: INTEGER											{ $$ = IntegerConstantSemanticAction($1); }
-	;
+mode: MAJOR    { $$ = MODE_MAJOR; }
+    | MINOR    { $$ = MODE_MINOR; }
+    ;
 
 %%
