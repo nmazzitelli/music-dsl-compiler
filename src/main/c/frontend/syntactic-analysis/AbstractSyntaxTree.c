@@ -106,9 +106,51 @@ void destroyEventList(EventList * list) {
 	}
 }
 
+void destroyTrack(Track * track) {
+	logDebugging(_logger, "Executing destructor: %s", __FUNCTION__);
+	if (track != NULL) {
+		free(track->name);
+		free(track->instrument);
+		destroyEventList(track->events);
+		free(track);
+	}
+}
+
+void destroyTrackList(TrackList * list) {
+	logDebugging(_logger, "Executing destructor: %s", __FUNCTION__);
+	while (list != NULL) {
+		TrackList * next = list->next;
+		destroyTrack(list->track);
+		free(list);
+		list = next;
+	}
+}
+
+void destroyGlobalSetting(GlobalSetting * setting) {
+	logDebugging(_logger, "Executing destructor: %s", __FUNCTION__);
+	if (setting != NULL) {
+		if (setting->type == SETTING_KEY) {
+			free(setting->key.noteClass);
+		}
+		free(setting);
+	}
+}
+
+void destroyGlobalSettingList(GlobalSettingList * list) {
+	logDebugging(_logger, "Executing destructor: %s", __FUNCTION__);
+	while (list != NULL) {
+		GlobalSettingList * next = list->next;
+		destroyGlobalSetting(list->setting);
+		free(list);
+		list = next;
+	}
+}
+
 void destroyProgram(Program * program) {
 	logDebugging(_logger, "Executing destructor: %s", __FUNCTION__);
 	if (program != NULL) {
+		destroyGlobalSettingList(program->settings);
+		destroyTrackList(program->tracks);
 		free(program);
 	}
 }
