@@ -20,51 +20,43 @@ ModuleDestructor initializeAbstractSyntaxTreeModule() {
 
 /* PUBLIC FUNCTIONS */
 
-void destroyConstant(Constant * constant) {
-	logDebugging(_logger, "Executing destructor: %s", __FUNCTION__);
-	if (constant != NULL) {
-		free(constant);
-	}
-}
-
 void destroyExpression(Expression * expression) {
 	logDebugging(_logger, "Executing destructor: %s", __FUNCTION__);
 	if (expression != NULL) {
 		switch (expression->type) {
-			case ADDITION:
-			case DIVISION:
-			case MULTIPLICATION:
-			case SUBTRACTION:
-				destroyExpression(expression->leftExpression);
-				destroyExpression(expression->rightExpression);
+			case EXPR_STRING:
+			case EXPR_IDENTIFIER:
+				free(expression->stringValue);
 				break;
-			case FACTOR:
-				destroyFactor(expression->factor);
+			case EXPR_ADD:
+			case EXPR_SUB:
+			case EXPR_MUL:
+			case EXPR_DIV:
+			case EXPR_LT:
+			case EXPR_GT:
+			case EXPR_EQ:
+			case EXPR_NEQ:
+			case EXPR_LEQ:
+			case EXPR_GEQ:
+			case EXPR_AND:
+			case EXPR_OR:
+				destroyExpression(expression->left);
+				destroyExpression(expression->right);
+				break;
+			case EXPR_NOT:
+				destroyExpression(expression->operand);
+				break;
+			case EXPR_INTEGER:
+			case EXPR_BOOLEAN:
 				break;
 		}
 		free(expression);
 	}
 }
 
-void destroyFactor(Factor * factor) {
-	logDebugging(_logger, "Executing destructor: %s", __FUNCTION__);
-	if (factor != NULL) {
-		switch (factor->type) {
-			case CONSTANT:
-				destroyConstant(factor->constant);
-				break;
-			case EXPRESSION:
-				destroyExpression(factor->expression);
-				break;
-		}
-		free(factor);
-	}
-}
-
 void destroyProgram(Program * program) {
 	logDebugging(_logger, "Executing destructor: %s", __FUNCTION__);
 	if (program != NULL) {
-		destroyExpression(program->expression);
 		free(program);
 	}
 }
