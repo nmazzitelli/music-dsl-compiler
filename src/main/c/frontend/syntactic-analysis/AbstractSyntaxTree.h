@@ -121,8 +121,82 @@ struct Program {
  * Node recursive destructors.
  */
 
+struct Event {
+	union {
+		struct {
+			char * pitch;
+			DurationType duration;
+			Expression * velocity;
+		} note;
+		struct {
+			ChordNoteList * notes;
+			DurationType duration;
+			Expression * velocity;
+		} chord;
+		struct {
+			DurationType duration;
+		} rest;
+		struct {
+			Expression * count;
+			EventList * body;
+		} repeat;
+		struct {
+			Expression * condition;
+			EventList * thenBody;
+			EventList * elseBody;
+		} ifStatement;
+		struct {
+			VarType varType;
+			char * name;
+			Expression * value;
+		} varDecl;
+	};
+	EventType type;
+};
+
+struct Track {
+	char * name;
+	char * instrument;
+	EventList * events;
+};
+
+struct TrackList {
+	Track * track;
+	TrackList * next;
+};
+
+struct GlobalSetting {
+	union {
+		int tempo;
+		struct {
+			int numerator;
+			int denominator;
+		} timeSignature;
+		struct {
+			char * noteClass;
+			ModeType mode;
+		} key;
+	};
+	SettingType type;
+};
+
+struct GlobalSettingList {
+	GlobalSetting * setting;
+	GlobalSettingList * next;
+};
+
+/**
+ * Node recursive destructors.
+ */
+
 void destroyChordNoteList(ChordNoteList * list);
+void destroyEvent(Event * event);
+void destroyEventList(EventList * list);
 void destroyExpression(Expression * expression);
+void destroyGlobalSetting(GlobalSetting * setting);
+void destroyGlobalSettingList(GlobalSettingList * list);
 void destroyProgram(Program * program);
+void destroyTrack(Track * track);
+void destroyTrackList(TrackList * list);
 
 #endif
