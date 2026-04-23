@@ -88,14 +88,40 @@ enum SettingType {
 	SETTING_KEY
 };
 
+struct Expression {
+	union {
+		int intValue;
+		bool boolValue;
+		char * stringValue;
+		struct {
+			Expression * left;
+			Expression * right;
+		};
+		Expression * operand;
+	};
+	ExpressionType type;
+};
+
+struct ChordNoteList {
+	char * pitch;
+	ChordNoteList * next;
+};
+
+struct EventList {
+	Event * event;
+	EventList * next;
+};
+
 struct Program {
-	Expression * expression;
+	GlobalSettingList * settings;
+	TrackList * tracks;
 };
 
 /**
  * Node recursive destructors.
  */
 
+void destroyChordNoteList(ChordNoteList * list);
 void destroyExpression(Expression * expression);
 void destroyProgram(Program * program);
 
