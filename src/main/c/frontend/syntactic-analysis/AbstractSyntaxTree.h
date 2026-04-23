@@ -3,63 +3,89 @@
 
 #include "../../support/logging/Logger.h"
 #include "../../support/type/ModuleDestructor.h"
+#include <stdbool.h>
 #include <stdlib.h>
 
 /** Initialize module's internal state. */
 ModuleDestructor initializeAbstractSyntaxTreeModule();
 
 /**
- * This type definitions allows self-referencing types (e.g., an expression
- * that is made of another expressions, such as talking about you in 3rd
- * person, but without the madness).
+ * Self-referencing type forward declarations.
  */
 
+typedef enum DurationType DurationType;
+typedef enum EventType EventType;
 typedef enum ExpressionType ExpressionType;
-typedef enum FactorType FactorType;
+typedef enum ModeType ModeType;
+typedef enum SettingType SettingType;
+typedef enum VarType VarType;
 
-typedef struct Constant Constant;
+typedef struct ChordNoteList ChordNoteList;
+typedef struct Event Event;
+typedef struct EventList EventList;
 typedef struct Expression Expression;
-typedef struct Factor Factor;
+typedef struct GlobalSetting GlobalSetting;
+typedef struct GlobalSettingList GlobalSettingList;
 typedef struct Program Program;
+typedef struct Track Track;
+typedef struct TrackList TrackList;
 
 /**
  * Node types for the Abstract Syntax Tree (AST).
  */
 
+enum DurationType {
+	DURATION_WHOLE,
+	DURATION_HALF,
+	DURATION_QUARTER,
+	DURATION_EIGHTH,
+	DURATION_SIXTEENTH
+};
+
+enum ModeType {
+	MODE_MAJOR,
+	MODE_MINOR
+};
+
+enum VarType {
+	VAR_INTEGER,
+	VAR_BOOLEAN,
+	VAR_STRING
+};
+
 enum ExpressionType {
-	ADDITION,
-	DIVISION,
-	FACTOR,
-	MULTIPLICATION,
-	SUBTRACTION
+	EXPR_INTEGER,
+	EXPR_BOOLEAN,
+	EXPR_STRING,
+	EXPR_IDENTIFIER,
+	EXPR_ADD,
+	EXPR_SUB,
+	EXPR_MUL,
+	EXPR_DIV,
+	EXPR_LT,
+	EXPR_GT,
+	EXPR_EQ,
+	EXPR_NEQ,
+	EXPR_LEQ,
+	EXPR_GEQ,
+	EXPR_AND,
+	EXPR_OR,
+	EXPR_NOT
 };
 
-enum FactorType {
-	CONSTANT,
-	EXPRESSION
+enum EventType {
+	EVENT_NOTE,
+	EVENT_CHORD,
+	EVENT_REST,
+	EVENT_REPEAT,
+	EVENT_IF,
+	EVENT_VAR_DECL
 };
 
-struct Constant {
-	int value;
-};
-
-struct Factor {
-	union {
-		Constant * constant;
-		Expression * expression;
-	};
-	FactorType type;
-};
-
-struct Expression {
-	union {
-		Factor * factor;
-		struct {
-			Expression * leftExpression;
-			Expression * rightExpression;
-		};
-	};
-	ExpressionType type;
+enum SettingType {
+	SETTING_TEMPO,
+	SETTING_TIME_SIGNATURE,
+	SETTING_KEY
 };
 
 struct Program {
@@ -67,12 +93,10 @@ struct Program {
 };
 
 /**
- * Node recursive super-duper-trambolik-destructors.
+ * Node recursive destructors.
  */
 
-void destroyConstant(Constant * constant);
 void destroyExpression(Expression * expression);
-void destroyFactor(Factor * factor);
 void destroyProgram(Program * program);
 
 #endif
