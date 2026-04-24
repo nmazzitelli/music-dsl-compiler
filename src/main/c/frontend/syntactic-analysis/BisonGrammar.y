@@ -178,4 +178,46 @@ mode: MAJOR    { $$ = MODE_MAJOR; }
     | MINOR    { $$ = MODE_MINOR; }
     ;
 
+trackList: trackList track									{ $$ = AppendTrackSemanticAction($1, $2); }
+         | track											{ $$ = SingleTrackSemanticAction($1); }
+         ;
+
+track: TRACK IDENTIFIER INSTRUMENT STRING OPEN_BRACE eventList CLOSE_BRACE
+           { $$ = TrackSemanticAction($2, $4, $6); }
+     ;
+
+eventList: eventList event									{ $$ = AppendEventSemanticAction($1, $2); }
+         | %empty											{ $$ = NULL; }
+         ;
+
+event: PLAY PITCH duration SEMICOLON
+           { $$ = PlayNoteSemanticAction($2, $3, NULL); }
+     | PLAY PITCH duration VELOCITY expression SEMICOLON
+           { $$ = PlayNoteSemanticAction($2, $3, $5); }
+     | PLAY OPEN_BRACKET chordNoteList CLOSE_BRACKET duration SEMICOLON
+           { $$ = PlayChordSemanticAction($3, $5, NULL); }
+     | PLAY OPEN_BRACKET chordNoteList CLOSE_BRACKET duration VELOCITY expression SEMICOLON
+           { $$ = PlayChordSemanticAction($3, $5, $7); }
+     | REST duration SEMICOLON
+           { $$ = RestEventSemanticAction($2); }
+     | varType IDENTIFIER EQ expression SEMICOLON
+           { $$ = VarDeclEventSemanticAction($1, $2, $4); }
+     ;
+
+chordNoteList: chordNoteList COMMA PITCH					{ $$ = AppendChordNoteSemanticAction($1, $3); }
+             | PITCH										{ $$ = SingleChordNoteSemanticAction($1); }
+             ;
+
+duration: WHOLE       { $$ = DURATION_WHOLE; }
+        | HALF        { $$ = DURATION_HALF; }
+        | QUARTER     { $$ = DURATION_QUARTER; }
+        | EIGHTH      { $$ = DURATION_EIGHTH; }
+        | SIXTEENTH   { $$ = DURATION_SIXTEENTH; }
+        ;
+
+varType: INTEGER_TYPE    { $$ = VAR_INTEGER; }
+       | BOOLEAN_TYPE    { $$ = VAR_BOOLEAN; }
+       | STRING_TYPE     { $$ = VAR_STRING; }
+       ;
+
 %%
