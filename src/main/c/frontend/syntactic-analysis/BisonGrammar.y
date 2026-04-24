@@ -202,7 +202,15 @@ event: PLAY PITCH duration SEMICOLON
            { $$ = RestEventSemanticAction($2); }
      | varType IDENTIFIER EQ expression SEMICOLON
            { $$ = VarDeclEventSemanticAction($1, $2, $4); }
+     | REPEAT expression OPEN_BRACE eventList CLOSE_BRACE
+           { $$ = RepeatEventSemanticAction($2, $4); }
+     | IF expression THEN OPEN_BRACE eventList CLOSE_BRACE optElse
+           { $$ = IfEventSemanticAction($2, $5, $7); }
      ;
+
+optElse: ELSE OPEN_BRACE eventList CLOSE_BRACE				{ $$ = $3; }
+       | %empty												{ $$ = NULL; }
+       ;
 
 chordNoteList: chordNoteList COMMA PITCH					{ $$ = AppendChordNoteSemanticAction($1, $3); }
              | PITCH										{ $$ = SingleChordNoteSemanticAction($1); }
@@ -219,5 +227,25 @@ varType: INTEGER_TYPE    { $$ = VAR_INTEGER; }
        | BOOLEAN_TYPE    { $$ = VAR_BOOLEAN; }
        | STRING_TYPE     { $$ = VAR_STRING; }
        ;
+
+expression: INTEGER                                { $$ = IntegerExpressionSemanticAction($1); }
+          | TRUE                                   { $$ = BooleanExpressionSemanticAction(true); }
+          | FALSE                                  { $$ = BooleanExpressionSemanticAction(false); }
+          | STRING                                 { $$ = StringExpressionSemanticAction($1); }
+          | IDENTIFIER                             { $$ = IdentifierExpressionSemanticAction($1); }
+          | expression[l] ADD expression[r]        { $$ = BinaryExpressionSemanticAction($l, $r, EXPR_ADD); }
+          | expression[l] SUB expression[r]        { $$ = BinaryExpressionSemanticAction($l, $r, EXPR_SUB); }
+          | expression[l] MUL expression[r]        { $$ = BinaryExpressionSemanticAction($l, $r, EXPR_MUL); }
+          | expression[l] DIV expression[r]        { $$ = BinaryExpressionSemanticAction($l, $r, EXPR_DIV); }
+          | expression[l] LT expression[r]         { $$ = BinaryExpressionSemanticAction($l, $r, EXPR_LT); }
+          | expression[l] GT expression[r]         { $$ = BinaryExpressionSemanticAction($l, $r, EXPR_GT); }
+          | expression[l] EQ expression[r]         { $$ = BinaryExpressionSemanticAction($l, $r, EXPR_EQ); }
+          | expression[l] NEQ expression[r]        { $$ = BinaryExpressionSemanticAction($l, $r, EXPR_NEQ); }
+          | expression[l] LEQ expression[r]        { $$ = BinaryExpressionSemanticAction($l, $r, EXPR_LEQ); }
+          | expression[l] GEQ expression[r]        { $$ = BinaryExpressionSemanticAction($l, $r, EXPR_GEQ); }
+          | expression[l] AND expression[r]        { $$ = BinaryExpressionSemanticAction($l, $r, EXPR_AND); }
+          | expression[l] OR expression[r]         { $$ = BinaryExpressionSemanticAction($l, $r, EXPR_OR); }
+          | NOT expression[e]                      { $$ = UnaryNotExpressionSemanticAction($e); }
+          ;
 
 %%
