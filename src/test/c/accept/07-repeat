@@ -1,0 +1,5 @@
+track melody instrument "piano" {
+    repeat 4 {
+        play C4 eighth;
+    }
+}

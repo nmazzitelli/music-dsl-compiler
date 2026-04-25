@@ -1,5 +1,6 @@
 track melody instrument "piano" {
-    repeat (2 + 3 {
+    integer base = 2;
+    repeat (base + 2) {
         play C4 quarter;
     }
 }

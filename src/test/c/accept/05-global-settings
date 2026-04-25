@@ -1,0 +1,6 @@
+tempo 120;
+time_signature 4 / 4;
+key C major;
+track main instrument "piano" {
+    play C4 quarter;
+}

@@ -124,6 +124,8 @@ void yyerror(const YYLTYPE * location, const char * message) {}
 %token <token> OPEN_BRACKET
 %token <token> CLOSE_BRACKET
 %token <token> COMMA
+%token <token> OPEN_PAREN
+%token <token> CLOSE_PAREN
 
 %token <token> IGNORED
 %token <token> UNKNOWN
@@ -246,6 +248,7 @@ expression: INTEGER                                { $$ = IntegerExpressionSeman
           | expression[l] AND expression[r]        { $$ = BinaryExpressionSemanticAction($l, $r, EXPR_AND); }
           | expression[l] OR expression[r]         { $$ = BinaryExpressionSemanticAction($l, $r, EXPR_OR); }
           | NOT expression[e]                      { $$ = UnaryNotExpressionSemanticAction($e); }
+          | OPEN_PAREN expression[e] CLOSE_PAREN   { $$ = $e; }
           ;
 
 %%

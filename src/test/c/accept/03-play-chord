@@ -1,0 +1,3 @@
+track harmony instrument "strings" {
+    play [C4, E4, G4] half;
+}

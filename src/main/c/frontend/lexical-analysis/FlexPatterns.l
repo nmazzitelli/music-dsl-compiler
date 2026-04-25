@@ -107,6 +107,8 @@ whitespace			[[:space:]]+
 "["										{ return PunctuationLexemeAction(OPEN_BRACKET); }
 "]"										{ return PunctuationLexemeAction(CLOSE_BRACKET); }
 ","										{ return PunctuationLexemeAction(COMMA); }
+"("										{ return PunctuationLexemeAction(OPEN_PAREN); }
+")"										{ return PunctuationLexemeAction(CLOSE_PAREN); }
 
 [A-G][#bn]?[0-9]						{ return PitchLexemeAction(); }
 [A-G]									{ return NoteClassLexemeAction(); }
