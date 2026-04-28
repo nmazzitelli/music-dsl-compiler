@@ -1,0 +1,6 @@
+/* Program-level multiline comment:
+   verify lexer skips comment blocks cleanly. */
+track melody instrument "piano" {
+    /* Block comment inside track body. */
+    play C4 quarter;
+}

@@ -1,0 +1,5 @@
+track melody instrument "piano" {
+    if true then {
+        play C4 quarter;
+    }
+}
