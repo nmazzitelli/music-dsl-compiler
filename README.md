@@ -1,6 +1,6 @@
 [![✗](https://img.shields.io/badge/Release-v2.0.0-ffb600.svg?style=for-the-badge)](https://github.com/nmazzitelli/music-dsl-compiler/releases)
 
-[![✗](https://github.com/nmazzitelli/music-dsl-compiler/actions/workflows/pipeline.yaml/badge.svg?branch=production)](https://github.com/nmazzitelli/music-dsl-compiler/actions/workflows/pipeline.yaml)
+[![✗](https://github.com/nmazzitelli/music-dsl-compiler/actions/workflows/pipeline.yaml/badge.svg?branch=development)](https://github.com/nmazzitelli/music-dsl-compiler/actions/workflows/pipeline.yaml)
 
 # Music DSL Compiler
 
