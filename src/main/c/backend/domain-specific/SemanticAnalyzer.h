@@ -1,5 +1,5 @@
-#ifndef CALCULATOR_HEADER
-#define CALCULATOR_HEADER
+#ifndef SEMANTIC_ANALYZER_HEADER
+#define SEMANTIC_ANALYZER_HEADER
 
 #include "../../frontend/syntactic-analysis/AbstractSyntaxTree.h"
 #include "../../support/logging/Logger.h"
@@ -7,9 +7,9 @@
 #include "../../support/type/ModuleDestructor.h"
 
 /** Initialize module's internal state. */
-ModuleDestructor initializeCalculatorModule();
+ModuleDestructor initializeSemanticAnalyzerModule();
 
-/** Executes the calculator using the current compiler state. */
-void executeCalculator(CompilerState * compilerState);
+/** Executes semantic analysis using the current compiler state. */
+void executeSemanticAnalysis(CompilerState * compilerState);
 
 #endif
