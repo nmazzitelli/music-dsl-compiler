@@ -1,4 +1,4 @@
-track melody instrument "piano" {
-    integer vol = 80;
-    play C4 quarter velocity vol;
+track melody instrument piano {
+    integer vol = 80
+    play C4 quarter velocity vol
 }

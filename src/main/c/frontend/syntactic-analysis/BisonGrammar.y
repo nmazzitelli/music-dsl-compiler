@@ -172,9 +172,9 @@ globalSettingList: globalSettingList globalSetting		{ $$ = AppendGlobalSettingSe
                  | %empty								{ $$ = NULL; }
                  ;
 
-globalSetting: TEMPO INTEGER SEMICOLON						{ $$ = TempoSettingSemanticAction($2); }
-             | TIME SIGNATURE INTEGER DIV INTEGER SEMICOLON	{ $$ = TimeSignatureSettingSemanticAction($3, $5); }
-             | KEY NOTE_CLASS mode SEMICOLON				{ $$ = KeySettingSemanticAction($2, $3); }
+globalSetting: TEMPO INTEGER optSemicolon						{ $$ = TempoSettingSemanticAction($2); }
+             | TIME SIGNATURE INTEGER DIV INTEGER optSemicolon	{ $$ = TimeSignatureSettingSemanticAction($3, $5); }
+             | KEY NOTE_CLASS mode optSemicolon				{ $$ = KeySettingSemanticAction($2, $3); }
              ;
 
 mode: MAJOR    { $$ = MODE_MAJOR; }
@@ -185,7 +185,7 @@ trackList: trackList track									{ $$ = AppendTrackSemanticAction($1, $2); }
          | track											{ $$ = SingleTrackSemanticAction($1); }
          ;
 
-track: TRACK IDENTIFIER INSTRUMENT STRING OPEN_BRACE eventList CLOSE_BRACE
+track: TRACK IDENTIFIER INSTRUMENT IDENTIFIER OPEN_BRACE eventList CLOSE_BRACE
            { $$ = TrackSemanticAction($2, $4, $6); }
      ;
 
@@ -193,17 +193,17 @@ eventList: eventList event									{ $$ = AppendEventSemanticAction($1, $2); }
          | %empty											{ $$ = NULL; }
          ;
 
-event: PLAY PITCH duration SEMICOLON
+event: PLAY PITCH duration optSemicolon
            { $$ = PlayNoteSemanticAction($2, $3, NULL); }
-     | PLAY PITCH duration VELOCITY expression SEMICOLON
+     | PLAY PITCH duration VELOCITY expression optSemicolon
            { $$ = PlayNoteSemanticAction($2, $3, $5); }
-     | PLAY OPEN_BRACKET chordNoteList CLOSE_BRACKET duration SEMICOLON
+     | PLAY OPEN_BRACKET chordNoteList CLOSE_BRACKET duration optSemicolon
            { $$ = PlayChordSemanticAction($3, $5, NULL); }
-     | PLAY OPEN_BRACKET chordNoteList CLOSE_BRACKET duration VELOCITY expression SEMICOLON
+     | PLAY OPEN_BRACKET chordNoteList CLOSE_BRACKET duration VELOCITY expression optSemicolon
            { $$ = PlayChordSemanticAction($3, $5, $7); }
-     | REST duration SEMICOLON
+     | REST duration optSemicolon
            { $$ = RestEventSemanticAction($2); }
-     | varType IDENTIFIER EQ expression SEMICOLON
+     | varType IDENTIFIER EQ expression optSemicolon
            { $$ = VarDeclEventSemanticAction($1, $2, $4); }
      | REPEAT expression OPEN_BRACE eventList CLOSE_BRACE
            { $$ = RepeatEventSemanticAction($2, $4); }
@@ -214,6 +214,10 @@ event: PLAY PITCH duration SEMICOLON
 optElse: ELSE OPEN_BRACE eventList CLOSE_BRACE				{ $$ = $3; }
        | %empty												{ $$ = NULL; }
        ;
+
+optSemicolon: SEMICOLON
+            | %empty
+            ;
 
 chordNoteList: chordNoteList COMMA PITCH					{ $$ = AppendChordNoteSemanticAction($1, $3); }
              | PITCH										{ $$ = SingleChordNoteSemanticAction($1); }

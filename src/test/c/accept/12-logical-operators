@@ -1,9 +1,9 @@
-track melody instrument "piano" {
-    boolean a = true;
-    boolean b = false;
+track melody instrument piano {
+    boolean a = true
+    boolean b = false
     if a AND NOT b OR false then {
-        play C4 quarter;
+        play C4 quarter
     } else {
-        play D4 quarter;
+        play D4 quarter
     }
 }

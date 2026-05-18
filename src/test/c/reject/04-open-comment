@@ -1,4 +1,4 @@
 /* This comment never ends...
-track melody instrument "piano" {
-    play C4 quarter;
+track melody instrument piano {
+    play C4 quarter
 }

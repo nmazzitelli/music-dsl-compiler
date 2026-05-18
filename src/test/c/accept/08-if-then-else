@@ -1,8 +1,8 @@
-track melody instrument "piano" {
-    boolean loud = true;
+track melody instrument piano {
+    boolean loud = true
     if loud then {
-        play C4 quarter velocity 100;
+        play C4 quarter velocity 100
     } else {
-        play C4 quarter velocity 50;
+        play C4 quarter velocity 50
     }
 }

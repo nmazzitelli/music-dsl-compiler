@@ -1,5 +1,5 @@
-track melody instrument "piano" {
-    play E4 quarter velocity 64;
-    play G4 quarter velocity 80;
-    play C4 half velocity 100;
+track melody instrument piano {
+    play E4 quarter velocity 64
+    play G4 quarter velocity 80
+    play C4 half velocity 100
 }

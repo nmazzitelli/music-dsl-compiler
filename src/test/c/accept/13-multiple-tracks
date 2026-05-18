@@ -1,7 +1,7 @@
-track melody instrument "piano" {
-    play C4 quarter;
+track melody instrument piano {
+    play C4 quarter
 }
 
-track bass instrument "bass" {
-    play C2 half;
+track bass instrument bass {
+    play C2 half
 }
