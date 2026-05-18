@@ -72,7 +72,8 @@ void yyerror(const YYLTYPE * location, const char * message) {}
 
 /** Terminals - music keywords. */
 %token <token> TEMPO
-%token <token> TIME_SIGNATURE
+%token <token> TIME
+%token <token> SIGNATURE
 %token <token> KEY
 %token <token> MAJOR
 %token <token> MINOR
@@ -172,7 +173,7 @@ globalSettingList: globalSettingList globalSetting		{ $$ = AppendGlobalSettingSe
                  ;
 
 globalSetting: TEMPO INTEGER SEMICOLON						{ $$ = TempoSettingSemanticAction($2); }
-             | TIME_SIGNATURE INTEGER DIV INTEGER SEMICOLON	{ $$ = TimeSignatureSettingSemanticAction($2, $4); }
+             | TIME SIGNATURE INTEGER DIV INTEGER SEMICOLON	{ $$ = TimeSignatureSettingSemanticAction($3, $5); }
              | KEY NOTE_CLASS mode SEMICOLON				{ $$ = KeySettingSemanticAction($2, $3); }
              ;
 

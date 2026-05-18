@@ -63,7 +63,8 @@ whitespace			[[:space:]]+
 <MULTILINE_COMMENT>.					{ return IgnoredLexemeAction(); }
 
 "tempo"									{ return KeywordLexemeAction(TEMPO); }
-"time_signature"						{ return KeywordLexemeAction(TIME_SIGNATURE); }
+"time"									{ return KeywordLexemeAction(TIME); }
+"signature"								{ return KeywordLexemeAction(SIGNATURE); }
 "key"									{ return KeywordLexemeAction(KEY); }
 "major"									{ return KeywordLexemeAction(MAJOR); }
 "minor"									{ return KeywordLexemeAction(MINOR); }
