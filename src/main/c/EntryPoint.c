@@ -34,8 +34,13 @@ const int main(const int length, const char ** arguments) {
 	CompilationStatus compilationStatus = executeSyntacticAnalysis();
 	Program * program = compilerState.abstractSyntaxtTree;
 	if (compilationStatus == SUCCEEDED) {
-		executeSemanticAnalysis(&compilerState);
-		executeGenerator(&compilerState);
+		compilationStatus = executeSemanticAnalysis(&compilerState);
+		if (compilationStatus == SUCCEEDED) {
+			executeGenerator(&compilerState);
+		}
+		else {
+			logError(logger, "The semantic-analysis phase rejects the input program.");
+		}
 	}
 	else {
 		logError(logger, "The syntactic-analysis phase rejects the input program.");
