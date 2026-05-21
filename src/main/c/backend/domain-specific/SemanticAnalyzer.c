@@ -1,4 +1,5 @@
 #include "SemanticAnalyzer.h"
+#include <string.h>
 
 /* MODULE INTERNAL STATE */
 
@@ -7,6 +8,34 @@ static Logger * _logger = NULL;
 /* PRIVATE FUNCTIONS */
 
 static CompilationStatus _analyzeProgram(Program * program);
+static CompilationStatus _analyzeTrack(Track * track);
+static bool _isSupportedInstrument(const char * instrument);
+
+static bool _isSupportedInstrument(const char * instrument) {
+	static const char * supportedInstruments[] = {
+		"piano",
+		"guitar",
+		"bass",
+		"violin",
+		"flute",
+		"drums"
+	};
+	for (size_t index = 0; index < sizeof(supportedInstruments) / sizeof(supportedInstruments[0]); ++index) {
+		if (strcmp(instrument, supportedInstruments[index]) == 0) {
+			return true;
+		}
+	}
+	return false;
+}
+
+static CompilationStatus _analyzeTrack(Track * track) {
+	logDebugging(_logger, "Visiting track \"%s\".", track->name);
+	if (!_isSupportedInstrument(track->instrument)) {
+		logError(_logger, "Unsupported instrument \"%s\" in track \"%s\".", track->instrument, track->name);
+		return FAILED;
+	}
+	return SUCCEEDED;
+}
 
 static CompilationStatus _analyzeProgram(Program * program) {
 	logDebugging(_logger, "Analyzing program node...");
@@ -14,7 +43,10 @@ static CompilationStatus _analyzeProgram(Program * program) {
 		logDebugging(_logger, "Visiting global setting of type %d.", currentSetting->setting->type);
 	}
 	for (TrackList * currentTrack = program->tracks; currentTrack != NULL; currentTrack = currentTrack->next) {
-		logDebugging(_logger, "Visiting track \"%s\".", currentTrack->track->name);
+		CompilationStatus status = _analyzeTrack(currentTrack->track);
+		if (status != SUCCEEDED) {
+			return status;
+		}
 	}
 	return SUCCEEDED;
 }
