@@ -35,16 +35,16 @@ const int main(const int length, const char ** arguments) {
 	Program * program = compilerState.abstractSyntaxtTree;
 	if (compilationStatus == SUCCEEDED) {
 		compilationStatus = executeSemanticAnalysis(&compilerState);
-		if (compilationStatus == SUCCEEDED) {
-			executeGenerator(&compilerState);
-		}
-		else {
+		if (compilationStatus != SUCCEEDED) {
 			logError(logger, "The semantic-analysis phase rejects the input program.");
 		}
 	}
 	else {
 		logError(logger, "The syntactic-analysis phase rejects the input program.");
 		compilationStatus = FAILED;
+	}
+	if (compilationStatus == SUCCEEDED) {
+		executeGenerator(&compilerState);
 	}
 	logDebugging(logger, "Releasing AST resources...");
 	destroyProgram(program);
