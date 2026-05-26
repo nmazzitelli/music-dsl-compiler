@@ -1,0 +1,5 @@
+time signature 0 / 4
+
+track main instrument piano {
+    play C4 quarter
+}

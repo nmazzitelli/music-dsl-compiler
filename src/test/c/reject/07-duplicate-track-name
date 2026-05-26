@@ -1,0 +1,7 @@
+track melodia instrument piano {
+    play C4 quarter
+}
+
+track melodia instrument bass {
+    play C2 quarter
+}

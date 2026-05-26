@@ -1,0 +1,8 @@
+tempo 90
+time signature 6 / 8
+key A minor
+
+track main instrument piano {
+    play C4 eighth
+    rest eighth
+}
