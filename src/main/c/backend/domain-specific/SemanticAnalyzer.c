@@ -3,19 +3,31 @@
 
 /* MODULE INTERNAL STATE */
 
+typedef struct Symbol Symbol;
+
+struct Symbol {
+	const char * name;
+	VarType type;
+	Symbol * next;
+};
+
 static Logger * _logger = NULL;
 
 /* PRIVATE FUNCTIONS */
 
-static CompilationStatus _analyzeEvent(Event * event);
-static CompilationStatus _analyzeEventList(EventList * events);
+static CompilationStatus _analyzeEvent(Event * event, Symbol ** symbols);
+static CompilationStatus _analyzeEventList(EventList * events, Symbol ** symbols);
+static CompilationStatus _analyzeExpression(Expression * expression, Symbol * symbols);
 static CompilationStatus _analyzeGlobalSetting(GlobalSetting * setting);
 static CompilationStatus _analyzeProgram(Program * program);
 static CompilationStatus _analyzeTrack(Track * track);
+static CompilationStatus _declareSymbol(Symbol ** symbols, const char * name, VarType type);
+static void _destroySymbols(Symbol * symbols);
+static Symbol * _findSymbol(Symbol * symbols, const char * name);
 static CompilationStatus _validateChordPitches(ChordNoteList * notes);
 static CompilationStatus _validatePitch(const char * pitch);
 static CompilationStatus _validateUniqueTrackNames(TrackList * tracks);
-static CompilationStatus _validateVelocity(Expression * velocity);
+static CompilationStatus _validateVelocity(Expression * velocity, Symbol * symbols);
 static bool _isValidPitchAccidental(char accidental);
 static bool _isValidPitchNoteClass(char noteClass);
 static bool _isValidKeyNoteClass(const char * noteClass);
@@ -97,6 +109,37 @@ static bool _isSupportedInstrument(const char * instrument) {
 	return false;
 }
 
+static Symbol * _findSymbol(Symbol * symbols, const char * name) {
+	for (Symbol * currentSymbol = symbols; currentSymbol != NULL; currentSymbol = currentSymbol->next) {
+		if (strcmp(currentSymbol->name, name) == 0) {
+			return currentSymbol;
+		}
+	}
+	return NULL;
+}
+
+static CompilationStatus _declareSymbol(Symbol ** symbols, const char * name, VarType type) {
+	Symbol * symbol = NULL;
+	if (_findSymbol(*symbols, name) != NULL) {
+		logError(_logger, "Variable \"%s\" is already declared in this track.", name);
+		return FAILED;
+	}
+	symbol = calloc(1, sizeof(Symbol));
+	symbol->name = name;
+	symbol->type = type;
+	symbol->next = *symbols;
+	*symbols = symbol;
+	return SUCCEEDED;
+}
+
+static void _destroySymbols(Symbol * symbols) {
+	while (symbols != NULL) {
+		Symbol * nextSymbol = symbols->next;
+		free(symbols);
+		symbols = nextSymbol;
+	}
+}
+
 static CompilationStatus _validatePitch(const char * pitch) {
 	size_t length = strlen(pitch);
 	size_t octaveIndex = 0;
@@ -131,6 +174,47 @@ static CompilationStatus _validatePitch(const char * pitch) {
 	return SUCCEEDED;
 }
 
+static CompilationStatus _analyzeExpression(Expression * expression, Symbol * symbols) {
+	if (expression == NULL) {
+		return SUCCEEDED;
+	}
+	switch (expression->type) {
+		case EXPR_INTEGER:
+		case EXPR_BOOLEAN:
+		case EXPR_STRING:
+			return SUCCEEDED;
+		case EXPR_IDENTIFIER:
+			if (_findSymbol(symbols, expression->stringValue) == NULL) {
+				logError(_logger, "Variable \"%s\" is used before declaration.", expression->stringValue);
+				return FAILED;
+			}
+			return SUCCEEDED;
+		case EXPR_NOT:
+			return _analyzeExpression(expression->operand, symbols);
+		case EXPR_ADD:
+		case EXPR_SUB:
+		case EXPR_MUL:
+		case EXPR_DIV:
+		case EXPR_LT:
+		case EXPR_GT:
+		case EXPR_EQ:
+		case EXPR_NEQ:
+		case EXPR_LEQ:
+		case EXPR_GEQ:
+		case EXPR_AND:
+		case EXPR_OR: {
+			CompilationStatus status = _analyzeExpression(expression->left, symbols);
+			if (status != SUCCEEDED) {
+				return status;
+			}
+			return _analyzeExpression(expression->right, symbols);
+		}
+		default:
+			logError(_logger, "Unknown expression type %d.", expression->type);
+			return FAILED;
+	}
+}
+
 static CompilationStatus _validateChordPitches(ChordNoteList * notes) {
 	for (ChordNoteList * currentNote = notes; currentNote != NULL; currentNote = currentNote->next) {
 		CompilationStatus status = _validatePitch(currentNote->pitch);
@@ -141,7 +225,11 @@ static CompilationStatus _validateChordPitches(ChordNoteList * notes) {
 	return SUCCEEDED;
 }
 
-static CompilationStatus _validateVelocity(Expression * velocity) {
+static CompilationStatus _validateVelocity(Expression * velocity, Symbol * symbols) {
+	CompilationStatus status = _analyzeExpression(velocity, symbols);
+	if (status != SUCCEEDED) {
+		return status;
+	}
 	if (velocity == NULL) {
 		return SUCCEEDED;
 	}
@@ -155,33 +243,46 @@ static CompilationStatus _validateVelocity(Expression * velocity) {
 	return SUCCEEDED;
 }
 
-static CompilationStatus _analyzeEvent(Event * event) {
+static CompilationStatus _analyzeEvent(Event * event, Symbol ** symbols) {
 	switch (event->type) {
 		case EVENT_NOTE: {
 			CompilationStatus status = _validatePitch(event->note.pitch);
 			if (status != SUCCEEDED) {
 				return status;
 			}
-			return _validateVelocity(event->note.velocity);
+			return _validateVelocity(event->note.velocity, *symbols);
 		}
 		case EVENT_CHORD: {
 			CompilationStatus status = _validateChordPitches(event->chord.notes);
 			if (status != SUCCEEDED) {
 				return status;
 			}
-			return _validateVelocity(event->chord.velocity);
+			return _validateVelocity(event->chord.velocity, *symbols);
 		}
 		case EVENT_REPEAT:
-			return _analyzeEventList(event->repeat.body);
+			if (_analyzeExpression(event->repeat.count, *symbols) != SUCCEEDED) {
+				return FAILED;
+			}
+			return _analyzeEventList(event->repeat.body, symbols);
 		case EVENT_IF: {
-			CompilationStatus status = _analyzeEventList(event->ifStatement.thenBody);
+			CompilationStatus status = _analyzeExpression(event->ifStatement.condition, *symbols);
 			if (status != SUCCEEDED) {
 				return status;
 			}
-			return _analyzeEventList(event->ifStatement.elseBody);
+			status = _analyzeEventList(event->ifStatement.thenBody, symbols);
+			if (status != SUCCEEDED) {
+				return status;
+			}
+			return _analyzeEventList(event->ifStatement.elseBody, symbols);
+		}
+		case EVENT_VAR_DECL: {
+			CompilationStatus status = _analyzeExpression(event->varDecl.value, *symbols);
+			if (status != SUCCEEDED) {
+				return status;
+			}
+			return _declareSymbol(symbols, event->varDecl.name, event->varDecl.varType);
 		}
 		case EVENT_REST:
-		case EVENT_VAR_DECL:
 			return SUCCEEDED;
 		default:
 			logError(_logger, "Unknown event type %d.", event->type);
@@ -189,23 +290,29 @@ static CompilationStatus _analyzeEvent(Event * event) {
 	}
 }
 
-static CompilationStatus _analyzeEventList(EventList * events) {
-	for (EventList * currentEvent = events; currentEvent != NULL; currentEvent = currentEvent->next) {
-		CompilationStatus status = _analyzeEvent(currentEvent->event);
-		if (status != SUCCEEDED) {
-			return status;
-		}
+static CompilationStatus _analyzeEventList(EventList * events, Symbol ** symbols) {
+	CompilationStatus status = SUCCEEDED;
+	if (events == NULL) {
+		return SUCCEEDED;
 	}
-	return SUCCEEDED;
+	status = _analyzeEventList(events->next, symbols);
+	if (status != SUCCEEDED) {
+		return status;
+	}
+	return _analyzeEvent(events->event, symbols);
 }
 
 static CompilationStatus _analyzeTrack(Track * track) {
+	Symbol * symbols = NULL;
+	CompilationStatus status = SUCCEEDED;
 	logDebugging(_logger, "Visiting track \"%s\".", track->name);
 	if (!_isSupportedInstrument(track->instrument)) {
 		logError(_logger, "Unsupported instrument \"%s\" in track \"%s\".", track->instrument, track->name);
 		return FAILED;
 	}
-	return _analyzeEventList(track->events);
+	status = _analyzeEventList(track->events, &symbols);
+	_destroySymbols(symbols);
+	return status;
 }
 
 static CompilationStatus _analyzeGlobalSetting(GlobalSetting * setting) {

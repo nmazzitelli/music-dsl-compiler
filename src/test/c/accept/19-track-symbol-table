@@ -1,0 +1,6 @@
+track t instrument piano {
+    integer times = 4
+    repeat times {
+        play C4 quarter
+    }
+}
