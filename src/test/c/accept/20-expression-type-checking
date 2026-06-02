@@ -1,0 +1,5 @@
+track t instrument piano {
+    integer x = 1 + 2
+    boolean b = true AND false
+    boolean c = 1 < 2
+}

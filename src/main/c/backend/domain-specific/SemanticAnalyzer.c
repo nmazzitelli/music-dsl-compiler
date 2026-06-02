@@ -4,11 +4,19 @@
 /* MODULE INTERNAL STATE */
 
 typedef struct Symbol Symbol;
+typedef enum SemanticType SemanticType;
 
 struct Symbol {
 	const char * name;
 	VarType type;
 	Symbol * next;
+};
+
+enum SemanticType {
+	SEM_TYPE_INTEGER,
+	SEM_TYPE_BOOLEAN,
+	SEM_TYPE_STRING,
+	SEM_TYPE_ERROR
 };
 
 static Logger * _logger = NULL;
@@ -24,6 +32,10 @@ static CompilationStatus _analyzeTrack(Track * track);
 static CompilationStatus _declareSymbol(Symbol ** symbols, const char * name, VarType type);
 static void _destroySymbols(Symbol * symbols);
 static Symbol * _findSymbol(Symbol * symbols, const char * name);
+static SemanticType _inferExpressionType(Expression * expression, Symbol * symbols);
+static bool _isCompatibleVarType(VarType varType, SemanticType semanticType);
+static const char * _semanticTypeName(SemanticType semanticType);
+static SemanticType _semanticTypeFromVarType(VarType varType);
 static CompilationStatus _validateChordPitches(ChordNoteList * notes);
 static CompilationStatus _validatePitch(const char * pitch);
 static CompilationStatus _validateUniqueTrackNames(TrackList * tracks);
@@ -118,6 +130,36 @@ static Symbol * _findSymbol(Symbol * symbols, const char * name) {
 	return NULL;
 }
 
+static SemanticType _semanticTypeFromVarType(VarType varType) {
+	switch (varType) {
+		case VAR_INTEGER:
+			return SEM_TYPE_INTEGER;
+		case VAR_BOOLEAN:
+			return SEM_TYPE_BOOLEAN;
+		case VAR_STRING:
+			return SEM_TYPE_STRING;
+		default:
+			return SEM_TYPE_ERROR;
+	}
+}
+
+static const char * _semanticTypeName(SemanticType semanticType) {
+	switch (semanticType) {
+		case SEM_TYPE_INTEGER:
+			return "integer";
+		case SEM_TYPE_BOOLEAN:
+			return "boolean";
+		case SEM_TYPE_STRING:
+			return "string";
+		default:
+			return "error";
+	}
+}
+
+static bool _isCompatibleVarType(VarType varType, SemanticType semanticType) {
+	return _semanticTypeFromVarType(varType) == semanticType;
+}
+
 static CompilationStatus _declareSymbol(Symbol ** symbols, const char * name, VarType type) {
 	Symbol * symbol = NULL;
 	if (_findSymbol(*symbols, name) != NULL) {
@@ -174,45 +216,97 @@ static CompilationStatus _validatePitch(const char * pitch) {
 	return SUCCEEDED;
 }
 
-static CompilationStatus _analyzeExpression(Expression * expression, Symbol * symbols) {
+static SemanticType _inferExpressionType(Expression * expression, Symbol * symbols) {
+	SemanticType leftType = SEM_TYPE_ERROR;
+	SemanticType rightType = SEM_TYPE_ERROR;
 	if (expression == NULL) {
-		return SUCCEEDED;
+		return SEM_TYPE_ERROR;
 	}
 	switch (expression->type) {
 		case EXPR_INTEGER:
+			return SEM_TYPE_INTEGER;
 		case EXPR_BOOLEAN:
+			return SEM_TYPE_BOOLEAN;
 		case EXPR_STRING:
-			return SUCCEEDED;
-		case EXPR_IDENTIFIER:
-			if (_findSymbol(symbols, expression->stringValue) == NULL) {
+			return SEM_TYPE_STRING;
+		case EXPR_IDENTIFIER: {
+			Symbol * symbol = _findSymbol(symbols, expression->stringValue);
+			if (symbol == NULL) {
 				logError(_logger, "Variable \"%s\" is used before declaration.", expression->stringValue);
-				return FAILED;
+				return SEM_TYPE_ERROR;
 			}
-			return SUCCEEDED;
+			return _semanticTypeFromVarType(symbol->type);
+		}
 		case EXPR_NOT:
-			return _analyzeExpression(expression->operand, symbols);
+			leftType = _inferExpressionType(expression->operand, symbols);
+			if (leftType == SEM_TYPE_ERROR) {
+				return SEM_TYPE_ERROR;
+			}
+			if (leftType != SEM_TYPE_BOOLEAN) {
+				logError(_logger, "Operator NOT requires a boolean expression.");
+				return SEM_TYPE_ERROR;
+			}
+			return SEM_TYPE_BOOLEAN;
 		case EXPR_ADD:
 		case EXPR_SUB:
 		case EXPR_MUL:
 		case EXPR_DIV:
+			leftType = _inferExpressionType(expression->left, symbols);
+			rightType = _inferExpressionType(expression->right, symbols);
+			if (leftType == SEM_TYPE_ERROR || rightType == SEM_TYPE_ERROR) {
+				return SEM_TYPE_ERROR;
+			}
+			if (leftType != SEM_TYPE_INTEGER || rightType != SEM_TYPE_INTEGER) {
+				logError(_logger, "Arithmetic operators require integer operands.");
+				return SEM_TYPE_ERROR;
+			}
+			return SEM_TYPE_INTEGER;
 		case EXPR_LT:
 		case EXPR_GT:
-		case EXPR_EQ:
-		case EXPR_NEQ:
 		case EXPR_LEQ:
 		case EXPR_GEQ:
-		case EXPR_AND:
-		case EXPR_OR: {
-			CompilationStatus status = _analyzeExpression(expression->left, symbols);
-			if (status != SUCCEEDED) {
-				return status;
+			leftType = _inferExpressionType(expression->left, symbols);
+			rightType = _inferExpressionType(expression->right, symbols);
+			if (leftType == SEM_TYPE_ERROR || rightType == SEM_TYPE_ERROR) {
+				return SEM_TYPE_ERROR;
 			}
-			return _analyzeExpression(expression->right, symbols);
-		}
+			if (leftType != SEM_TYPE_INTEGER || rightType != SEM_TYPE_INTEGER) {
+				logError(_logger, "Relational operators require integer operands.");
+				return SEM_TYPE_ERROR;
+			}
+			return SEM_TYPE_BOOLEAN;
+		case EXPR_EQ:
+		case EXPR_NEQ:
+			leftType = _inferExpressionType(expression->left, symbols);
+			rightType = _inferExpressionType(expression->right, symbols);
+			if (leftType == SEM_TYPE_ERROR || rightType == SEM_TYPE_ERROR) {
+				return SEM_TYPE_ERROR;
+			}
+			if (leftType != rightType) {
+				logError(_logger, "Equality operators require operands of the same type.");
+				return SEM_TYPE_ERROR;
+			}
+			return SEM_TYPE_BOOLEAN;
+		case EXPR_AND:
+		case EXPR_OR:
+			leftType = _inferExpressionType(expression->left, symbols);
+			rightType = _inferExpressionType(expression->right, symbols);
+			if (leftType == SEM_TYPE_ERROR || rightType == SEM_TYPE_ERROR) {
+				return SEM_TYPE_ERROR;
+			}
+			if (leftType != SEM_TYPE_BOOLEAN || rightType != SEM_TYPE_BOOLEAN) {
+				logError(_logger, "Logical operators require boolean operands.");
+				return SEM_TYPE_ERROR;
+			}
+			return SEM_TYPE_BOOLEAN;
 		default:
 			logError(_logger, "Unknown expression type %d.", expression->type);
-			return FAILED;
+			return SEM_TYPE_ERROR;
 	}
+}
+
+static CompilationStatus _analyzeExpression(Expression * expression, Symbol * symbols) {
+	return _inferExpressionType(expression, symbols) == SEM_TYPE_ERROR ? FAILED : SUCCEEDED;
 }
 
 static CompilationStatus _validateChordPitches(ChordNoteList * notes) {
@@ -226,17 +320,19 @@ static CompilationStatus _validateChordPitches(ChordNoteList * notes) {
 }
 
 static CompilationStatus _validateVelocity(Expression * velocity, Symbol * symbols) {
-	CompilationStatus status = _analyzeExpression(velocity, symbols);
-	if (status != SUCCEEDED) {
-		return status;
-	}
+	SemanticType velocityType = SEM_TYPE_ERROR;
 	if (velocity == NULL) {
 		return SUCCEEDED;
 	}
-	if (velocity->type != EXPR_INTEGER) {
-		return SUCCEEDED;
+	velocityType = _inferExpressionType(velocity, symbols);
+	if (velocityType == SEM_TYPE_ERROR) {
+		return FAILED;
 	}
-	if (velocity->intValue < 0 || velocity->intValue > 127) {
+	if (velocityType != SEM_TYPE_INTEGER) {
+		logError(_logger, "Velocity expressions must be integer.");
+		return FAILED;
+	}
+	if (velocity->type == EXPR_INTEGER && (velocity->intValue < 0 || velocity->intValue > 127)) {
 		logError(_logger, "Velocity %d is outside the MIDI range.", velocity->intValue);
 		return FAILED;
 	}
@@ -260,25 +356,36 @@ static CompilationStatus _analyzeEvent(Event * event, Symbol ** symbols) {
 			return _validateVelocity(event->chord.velocity, *symbols);
 		}
 		case EVENT_REPEAT:
-			if (_analyzeExpression(event->repeat.count, *symbols) != SUCCEEDED) {
+			if (_inferExpressionType(event->repeat.count, *symbols) != SEM_TYPE_INTEGER) {
+				logError(_logger, "Repeat expressions must be integer.");
 				return FAILED;
 			}
 			return _analyzeEventList(event->repeat.body, symbols);
 		case EVENT_IF: {
-			CompilationStatus status = _analyzeExpression(event->ifStatement.condition, *symbols);
-			if (status != SUCCEEDED) {
-				return status;
+			if (_inferExpressionType(event->ifStatement.condition, *symbols) != SEM_TYPE_BOOLEAN) {
+				logError(_logger, "If conditions must be boolean.");
+				return FAILED;
 			}
-			status = _analyzeEventList(event->ifStatement.thenBody, symbols);
+			CompilationStatus status = _analyzeEventList(event->ifStatement.thenBody, symbols);
 			if (status != SUCCEEDED) {
 				return status;
 			}
 			return _analyzeEventList(event->ifStatement.elseBody, symbols);
 		}
 		case EVENT_VAR_DECL: {
-			CompilationStatus status = _analyzeExpression(event->varDecl.value, *symbols);
-			if (status != SUCCEEDED) {
-				return status;
+			SemanticType valueType = _inferExpressionType(event->varDecl.value, *symbols);
+			if (valueType == SEM_TYPE_ERROR) {
+				return FAILED;
+			}
+			if (!_isCompatibleVarType(event->varDecl.varType, valueType)) {
+				logError(
+					_logger,
+					"Variable \"%s\" expects %s but got %s.",
+					event->varDecl.name,
+					_semanticTypeName(_semanticTypeFromVarType(event->varDecl.varType)),
+					_semanticTypeName(valueType)
+				);
+				return FAILED;
 			}
 			return _declareSymbol(symbols, event->varDecl.name, event->varDecl.varType);
 		}
