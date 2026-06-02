@@ -7,10 +7,17 @@ static Logger * _logger = NULL;
 
 /* PRIVATE FUNCTIONS */
 
+static CompilationStatus _analyzeEvent(Event * event);
+static CompilationStatus _analyzeEventList(EventList * events);
 static CompilationStatus _analyzeGlobalSetting(GlobalSetting * setting);
 static CompilationStatus _analyzeProgram(Program * program);
 static CompilationStatus _analyzeTrack(Track * track);
+static CompilationStatus _validateChordPitches(ChordNoteList * notes);
+static CompilationStatus _validatePitch(const char * pitch);
 static CompilationStatus _validateUniqueTrackNames(TrackList * tracks);
+static CompilationStatus _validateVelocity(Expression * velocity);
+static bool _isValidPitchAccidental(char accidental);
+static bool _isValidPitchNoteClass(char noteClass);
 static bool _isValidKeyNoteClass(const char * noteClass);
 static bool _isValidTimeSignatureDenominator(int denominator);
 static bool _isSupportedInstrument(const char * instrument);
@@ -31,6 +38,32 @@ static bool _isValidKeyNoteClass(const char * noteClass) {
 		}
 	}
 	return false;
+}
+
+static bool _isValidPitchNoteClass(char noteClass) {
+	switch (noteClass) {
+		case 'A':
+		case 'B':
+		case 'C':
+		case 'D':
+		case 'E':
+		case 'F':
+		case 'G':
+			return true;
+		default:
+			return false;
+	}
+}
+
+static bool _isValidPitchAccidental(char accidental) {
+	switch (accidental) {
+		case '#':
+		case 'b':
+		case 'n':
+			return true;
+		default:
+			return false;
+	}
 }
 
 static bool _isValidTimeSignatureDenominator(int denominator) {
@@ -64,13 +97,115 @@ static bool _isSupportedInstrument(const char * instrument) {
 	return false;
 }
 
+static CompilationStatus _validatePitch(const char * pitch) {
+	size_t length = strlen(pitch);
+	size_t octaveIndex = 0;
+	int octave = 0;
+	if (length != 2 && length != 3) {
+		logError(_logger, "Invalid pitch \"%s\".", pitch);
+		return FAILED;
+	}
+	if (!_isValidPitchNoteClass(pitch[0])) {
+		logError(_logger, "Invalid pitch \"%s\".", pitch);
+		return FAILED;
+	}
+	if (length == 3) {
+		if (!_isValidPitchAccidental(pitch[1])) {
+			logError(_logger, "Invalid pitch \"%s\".", pitch);
+			return FAILED;
+		}
+		octaveIndex = 2;
+	}
+	else {
+		octaveIndex = 1;
+	}
+	if (pitch[octaveIndex] < '0' || pitch[octaveIndex] > '9') {
+		logError(_logger, "Invalid pitch \"%s\".", pitch);
+		return FAILED;
+	}
+	octave = pitch[octaveIndex] - '0';
+	if (octave < 0 || octave > 8) {
+		logError(_logger, "Pitch \"%s\" is outside the supported octave range.", pitch);
+		return FAILED;
+	}
+	return SUCCEEDED;
+}
+
+static CompilationStatus _validateChordPitches(ChordNoteList * notes) {
+	for (ChordNoteList * currentNote = notes; currentNote != NULL; currentNote = currentNote->next) {
+		CompilationStatus status = _validatePitch(currentNote->pitch);
+		if (status != SUCCEEDED) {
+			return status;
+		}
+	}
+	return SUCCEEDED;
+}
+
+static CompilationStatus _validateVelocity(Expression * velocity) {
+	if (velocity == NULL) {
+		return SUCCEEDED;
+	}
+	if (velocity->type != EXPR_INTEGER) {
+		return SUCCEEDED;
+	}
+	if (velocity->intValue < 0 || velocity->intValue > 127) {
+		logError(_logger, "Velocity %d is outside the MIDI range.", velocity->intValue);
+		return FAILED;
+	}
+	return SUCCEEDED;
+}
+
+static CompilationStatus _analyzeEvent(Event * event) {
+	switch (event->type) {
+		case EVENT_NOTE: {
+			CompilationStatus status = _validatePitch(event->note.pitch);
+			if (status != SUCCEEDED) {
+				return status;
+			}
+			return _validateVelocity(event->note.velocity);
+		}
+		case EVENT_CHORD: {
+			CompilationStatus status = _validateChordPitches(event->chord.notes);
+			if (status != SUCCEEDED) {
+				return status;
+			}
+			return _validateVelocity(event->chord.velocity);
+		}
+		case EVENT_REPEAT:
+			return _analyzeEventList(event->repeat.body);
+		case EVENT_IF: {
+			CompilationStatus status = _analyzeEventList(event->ifStatement.thenBody);
+			if (status != SUCCEEDED) {
+				return status;
+			}
+			return _analyzeEventList(event->ifStatement.elseBody);
+		}
+		case EVENT_REST:
+		case EVENT_VAR_DECL:
+			return SUCCEEDED;
+		default:
+			logError(_logger, "Unknown event type %d.", event->type);
+			return FAILED;
+	}
+}
+
+static CompilationStatus _analyzeEventList(EventList * events) {
+	for (EventList * currentEvent = events; currentEvent != NULL; currentEvent = currentEvent->next) {
+		CompilationStatus status = _analyzeEvent(currentEvent->event);
+		if (status != SUCCEEDED) {
+			return status;
+		}
+	}
+	return SUCCEEDED;
+}
+
 static CompilationStatus _analyzeTrack(Track * track) {
 	logDebugging(_logger, "Visiting track \"%s\".", track->name);
 	if (!_isSupportedInstrument(track->instrument)) {
 		logError(_logger, "Unsupported instrument \"%s\" in track \"%s\".", track->instrument, track->name);
 		return FAILED;
 	}
-	return SUCCEEDED;
+	return _analyzeEventList(track->events);
 }
 
 static CompilationStatus _analyzeGlobalSetting(GlobalSetting * setting) {

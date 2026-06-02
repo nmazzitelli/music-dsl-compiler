@@ -1,0 +1,4 @@
+track melody instrument piano {
+    play C4 quarter velocity 0
+    play E4 quarter velocity 127
+}

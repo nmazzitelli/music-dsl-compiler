@@ -1,0 +1,5 @@
+track melody instrument piano {
+    play D#5 eighth
+    play Bb3 half
+    play Fn4 quarter
+}

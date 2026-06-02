@@ -1,0 +1,3 @@
+track harmony instrument piano {
+    play [C4, E4, C9] half
+}
