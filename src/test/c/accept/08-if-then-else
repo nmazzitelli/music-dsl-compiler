@@ -5,4 +5,11 @@ track melody instrument piano {
     } else {
         play C4 quarter velocity 50
     }
+
+    integer x = 4
+    if x > 2 then {
+        play E4 quarter
+    } else {
+        rest quarter
+    }
 }

@@ -1,3 +1,5 @@
+key G major
+
 track melody instrument piano {
     play D#5 eighth
     play Bb3 half

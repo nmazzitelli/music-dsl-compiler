@@ -23,21 +23,22 @@ static Logger * _logger = NULL;
 
 /* PRIVATE FUNCTIONS */
 
-static CompilationStatus _analyzeEvent(Event * event, Symbol ** symbols);
-static CompilationStatus _analyzeEventList(EventList * events, Symbol ** symbols);
+static CompilationStatus _analyzeEvent(Event * event, Symbol ** symbols, bool hasKey);
+static CompilationStatus _analyzeEventList(EventList * events, Symbol ** symbols, bool hasKey);
 static CompilationStatus _analyzeExpression(Expression * expression, Symbol * symbols);
 static CompilationStatus _analyzeGlobalSetting(GlobalSetting * setting);
 static CompilationStatus _analyzeProgram(Program * program);
-static CompilationStatus _analyzeTrack(Track * track);
+static CompilationStatus _analyzeTrack(Track * track, bool hasKey);
 static CompilationStatus _declareSymbol(Symbol ** symbols, const char * name, VarType type);
 static void _destroySymbols(Symbol * symbols);
 static Symbol * _findSymbol(Symbol * symbols, const char * name);
 static SemanticType _inferExpressionType(Expression * expression, Symbol * symbols);
 static bool _isCompatibleVarType(VarType varType, SemanticType semanticType);
+static bool _programHasKey(Program * program);
 static const char * _semanticTypeName(SemanticType semanticType);
 static SemanticType _semanticTypeFromVarType(VarType varType);
-static CompilationStatus _validateChordPitches(ChordNoteList * notes);
-static CompilationStatus _validatePitch(const char * pitch);
+static CompilationStatus _validateChordPitches(ChordNoteList * notes, bool hasKey);
+static CompilationStatus _validatePitch(const char * pitch, bool hasKey);
 static CompilationStatus _validateUniqueTrackNames(TrackList * tracks);
 static CompilationStatus _validateVelocity(Expression * velocity, Symbol * symbols);
 static bool _isValidPitchAccidental(char accidental);
@@ -182,7 +183,7 @@ static void _destroySymbols(Symbol * symbols) {
 	}
 }
 
-static CompilationStatus _validatePitch(const char * pitch) {
+static CompilationStatus _validatePitch(const char * pitch, bool hasKey) {
 	size_t length = strlen(pitch);
 	size_t octaveIndex = 0;
 	int octave = 0;
@@ -197,6 +198,10 @@ static CompilationStatus _validatePitch(const char * pitch) {
 	if (length == 3) {
 		if (!_isValidPitchAccidental(pitch[1])) {
 			logError(_logger, "Invalid pitch \"%s\".", pitch);
+			return FAILED;
+		}
+		if (pitch[1] == 'n' && !hasKey) {
+			logError(_logger, "Natural modifier requires a key setting.");
 			return FAILED;
 		}
 		octaveIndex = 2;
@@ -309,9 +314,9 @@ static CompilationStatus _analyzeExpression(Expression * expression, Symbol * sy
 	return _inferExpressionType(expression, symbols) == SEM_TYPE_ERROR ? FAILED : SUCCEEDED;
 }
 
-static CompilationStatus _validateChordPitches(ChordNoteList * notes) {
+static CompilationStatus _validateChordPitches(ChordNoteList * notes, bool hasKey) {
 	for (ChordNoteList * currentNote = notes; currentNote != NULL; currentNote = currentNote->next) {
-		CompilationStatus status = _validatePitch(currentNote->pitch);
+		CompilationStatus status = _validatePitch(currentNote->pitch, hasKey);
 		if (status != SUCCEEDED) {
 			return status;
 		}
@@ -339,17 +344,17 @@ static CompilationStatus _validateVelocity(Expression * velocity, Symbol * symbo
 	return SUCCEEDED;
 }
 
-static CompilationStatus _analyzeEvent(Event * event, Symbol ** symbols) {
+static CompilationStatus _analyzeEvent(Event * event, Symbol ** symbols, bool hasKey) {
 	switch (event->type) {
 		case EVENT_NOTE: {
-			CompilationStatus status = _validatePitch(event->note.pitch);
+			CompilationStatus status = _validatePitch(event->note.pitch, hasKey);
 			if (status != SUCCEEDED) {
 				return status;
 			}
 			return _validateVelocity(event->note.velocity, *symbols);
 		}
 		case EVENT_CHORD: {
-			CompilationStatus status = _validateChordPitches(event->chord.notes);
+			CompilationStatus status = _validateChordPitches(event->chord.notes, hasKey);
 			if (status != SUCCEEDED) {
 				return status;
 			}
@@ -360,17 +365,17 @@ static CompilationStatus _analyzeEvent(Event * event, Symbol ** symbols) {
 				logError(_logger, "Repeat expressions must be integer.");
 				return FAILED;
 			}
-			return _analyzeEventList(event->repeat.body, symbols);
+			return _analyzeEventList(event->repeat.body, symbols, hasKey);
 		case EVENT_IF: {
 			if (_inferExpressionType(event->ifStatement.condition, *symbols) != SEM_TYPE_BOOLEAN) {
 				logError(_logger, "If conditions must be boolean.");
 				return FAILED;
 			}
-			CompilationStatus status = _analyzeEventList(event->ifStatement.thenBody, symbols);
+			CompilationStatus status = _analyzeEventList(event->ifStatement.thenBody, symbols, hasKey);
 			if (status != SUCCEEDED) {
 				return status;
 			}
-			return _analyzeEventList(event->ifStatement.elseBody, symbols);
+			return _analyzeEventList(event->ifStatement.elseBody, symbols, hasKey);
 		}
 		case EVENT_VAR_DECL: {
 			SemanticType valueType = _inferExpressionType(event->varDecl.value, *symbols);
@@ -397,19 +402,19 @@ static CompilationStatus _analyzeEvent(Event * event, Symbol ** symbols) {
 	}
 }
 
-static CompilationStatus _analyzeEventList(EventList * events, Symbol ** symbols) {
+static CompilationStatus _analyzeEventList(EventList * events, Symbol ** symbols, bool hasKey) {
 	CompilationStatus status = SUCCEEDED;
 	if (events == NULL) {
 		return SUCCEEDED;
 	}
-	status = _analyzeEventList(events->next, symbols);
+	status = _analyzeEventList(events->next, symbols, hasKey);
 	if (status != SUCCEEDED) {
 		return status;
 	}
-	return _analyzeEvent(events->event, symbols);
+	return _analyzeEvent(events->event, symbols, hasKey);
 }
 
-static CompilationStatus _analyzeTrack(Track * track) {
+static CompilationStatus _analyzeTrack(Track * track, bool hasKey) {
 	Symbol * symbols = NULL;
 	CompilationStatus status = SUCCEEDED;
 	logDebugging(_logger, "Visiting track \"%s\".", track->name);
@@ -417,9 +422,18 @@ static CompilationStatus _analyzeTrack(Track * track) {
 		logError(_logger, "Unsupported instrument \"%s\" in track \"%s\".", track->instrument, track->name);
 		return FAILED;
 	}
-	status = _analyzeEventList(track->events, &symbols);
+	status = _analyzeEventList(track->events, &symbols, hasKey);
 	_destroySymbols(symbols);
 	return status;
+}
+
+static bool _programHasKey(Program * program) {
+	for (GlobalSettingList * currentSetting = program->settings; currentSetting != NULL; currentSetting = currentSetting->next) {
+		if (currentSetting->setting->type == SETTING_KEY) {
+			return true;
+		}
+	}
+	return false;
 }
 
 static CompilationStatus _analyzeGlobalSetting(GlobalSetting * setting) {
@@ -469,6 +483,7 @@ static CompilationStatus _validateUniqueTrackNames(TrackList * tracks) {
 }
 
 static CompilationStatus _analyzeProgram(Program * program) {
+	bool hasKey = _programHasKey(program);
 	logDebugging(_logger, "Analyzing program node...");
 	for (GlobalSettingList * currentSetting = program->settings; currentSetting != NULL; currentSetting = currentSetting->next) {
 		logDebugging(_logger, "Visiting global setting of type %d.", currentSetting->setting->type);
@@ -482,7 +497,7 @@ static CompilationStatus _analyzeProgram(Program * program) {
 		return status;
 	}
 	for (TrackList * currentTrack = program->tracks; currentTrack != NULL; currentTrack = currentTrack->next) {
-		status = _analyzeTrack(currentTrack->track);
+		status = _analyzeTrack(currentTrack->track, hasKey);
 		if (status != SUCCEEDED) {
 			return status;
 		}

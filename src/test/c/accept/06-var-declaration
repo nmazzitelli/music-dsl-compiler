@@ -1,4 +1,6 @@
 track melody instrument piano {
     integer vol = 80
+    boolean enabled = true
+    string name = "main"
     play C4 quarter velocity vol
 }

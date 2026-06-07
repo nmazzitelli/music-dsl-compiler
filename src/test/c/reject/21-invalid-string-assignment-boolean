@@ -1,0 +1,3 @@
+track t instrument piano {
+    string s = false
+}

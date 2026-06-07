@@ -1,0 +1,5 @@
+track t instrument piano {
+    if 4 then {
+        play C4 quarter
+    }
+}

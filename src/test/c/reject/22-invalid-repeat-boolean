@@ -1,0 +1,5 @@
+track t instrument piano {
+    repeat true {
+        play C4 quarter
+    }
+}

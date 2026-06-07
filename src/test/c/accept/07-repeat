@@ -2,4 +2,9 @@ track melody instrument piano {
     repeat 4 {
         play C4 eighth
     }
+
+    integer times = 4
+    repeat times {
+        play D4 eighth
+    }
 }
