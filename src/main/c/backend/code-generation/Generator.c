@@ -42,7 +42,6 @@ static void _appendMusicEvent(MusicEvent ** head, MusicEvent ** tail, MusicEvent
 static void _appendMusicTrack(MusicTrack ** head, MusicTrack ** tail, MusicTrack * track);
 static CompilationStatus _copyMusicEventList(MusicEvent * source, MusicEvent ** copyHead, MusicEvent ** copyTail);
 static CompilationStatus _copyMusicNoteList(MusicNoteList * source, MusicNoteList ** copyHead, MusicNoteList ** copyTail);
-static RuntimeSymbol * _copyRuntimeSymbols(RuntimeSymbol * symbols);
 static CompilationStatus _createChordEvent(Event * event, LoweringState * state, MusicEvent ** musicEvent);
 static MusicEvent * _createRestEvent(DurationType duration);
 static CompilationStatus _createNoteEvent(Event * event, LoweringState * state, MusicEvent ** musicEvent);
@@ -54,9 +53,7 @@ static RuntimeSymbol * _findRuntimeSymbol(RuntimeSymbol * symbols, const char * 
 static int _getDefaultVelocity();
 static int _getDurationTicks(DurationType duration);
 static int _getInstrumentProgram(const char * instrument);
-static int _getKeySignatureAdjustment(MusicKey * key, char noteClass);
 static int _getNextMelodicChannel(int currentChannel);
-static int _getPitchBaseSemitone(char noteClass);
 static CompilationStatus _lowerConditional(Event * event, LoweringState * state, MusicEvent ** head, MusicEvent ** tail);
 static CompilationStatus _lowerEvent(Event * event, LoweringState * state, MusicEvent ** head, MusicEvent ** tail);
 static CompilationStatus _lowerEventList(EventList * events, LoweringState * state, MusicEvent ** head, MusicEvent ** tail);
@@ -65,7 +62,6 @@ static CompilationStatus _lowerRepeat(Event * event, LoweringState * state, Musi
 static CompilationStatus _lowerTrack(Track * track, MusicKey * key, int channel, MusicTrack ** musicTrack);
 static MusicKeyMode _musicKeyModeFromAst(ModeType mode);
 static MusicEvent * _newMusicEvent(MusicEventType type);
-static CompilationStatus _parseMidiPitch(const char * pitch, MusicKey * key, int * midiPitch);
 static CompilationStatus _populateCompositionSettings(Program * program, MusicComposition * composition);
 static CompilationStatus _setRuntimeSymbol(RuntimeSymbol ** symbols, const char * name, RuntimeValue value);
 
@@ -148,29 +144,6 @@ static CompilationStatus _copyMusicEventList(MusicEvent * source, MusicEvent ** 
 	return SUCCEEDED;
 }
 
-static RuntimeSymbol * _copyRuntimeSymbols(RuntimeSymbol * symbols) {
-	RuntimeSymbol * copyHead = NULL;
-	RuntimeSymbol * copyTail = NULL;
-	for (RuntimeSymbol * currentSymbol = symbols; currentSymbol != NULL; currentSymbol = currentSymbol->next) {
-		RuntimeSymbol * copy = calloc(1, sizeof(RuntimeSymbol));
-		if (copy == NULL) {
-			_destroyRuntimeSymbols(copyHead);
-			return NULL;
-		}
-		copy->name = currentSymbol->name;
-		copy->value = currentSymbol->value;
-		if (copyHead == NULL) {
-			copyHead = copy;
-			copyTail = copy;
-		}
-		else {
-			copyTail->next = copy;
-			copyTail = copy;
-		}
-	}
-	return copyHead;
-}
-
 static CompilationStatus _createChordEvent(Event * event, LoweringState * state, MusicEvent ** musicEvent) {
 	MusicEvent * loweredEvent = _newMusicEvent(MUSIC_EVENT_CHORD);
 	MusicNoteList * head = NULL;
@@ -193,12 +166,7 @@ static CompilationStatus _createChordEvent(Event * event, LoweringState * state,
 			free(loweredEvent);
 			return OUT_OF_MEMORY;
 		}
-		if (_parseMidiPitch(currentNote->pitch, state->key, &loweredNote->note.midiPitch) != SUCCEEDED) {
-			destroyMusicNoteList(head);
-			free(loweredEvent);
-			free(loweredNote);
-			return FAILED;
-		}
+		loweredNote->note.midiPitch = pitchToMidiNumber(currentNote->pitch, state->key);
 		loweredNote->note.durationTicks = _getDurationTicks(event->chord.duration);
 		loweredNote->note.velocity = velocity;
 		if (head == NULL) {
@@ -231,10 +199,7 @@ static CompilationStatus _createNoteEvent(Event * event, LoweringState * state, 
 	if (loweredEvent == NULL) {
 		return OUT_OF_MEMORY;
 	}
-	if (_parseMidiPitch(event->note.pitch, state->key, &loweredEvent->note.midiPitch) != SUCCEEDED) {
-		free(loweredEvent);
-		return FAILED;
-	}
+	loweredEvent->note.midiPitch = pitchToMidiNumber(event->note.pitch, state->key);
 	if (event->note.velocity != NULL) {
 		CompilationStatus status = _evaluateInteger(event->note.velocity, state->symbols, &velocity);
 		if (status != SUCCEEDED) {
@@ -460,75 +425,12 @@ static int _getInstrumentProgram(const char * instrument) {
 	return 0;
 }
 
-static int _getKeySignatureAdjustment(MusicKey * key, char noteClass) {
-	static const char sharpOrder[] = {'F', 'C', 'G', 'D', 'A', 'E', 'B'};
-	static const char flatOrder[] = {'B', 'E', 'A', 'D', 'G', 'C', 'F'};
-	int alterationCount = 0;
-	if (key == NULL || !key->isDefined || key->noteClass == NULL) {
-		return 0;
-	}
-	if (key->mode == MUSIC_KEY_MAJOR) {
-		if (strcmp(key->noteClass, "C") == 0) alterationCount = 0;
-		else if (strcmp(key->noteClass, "G") == 0) alterationCount = 1;
-		else if (strcmp(key->noteClass, "D") == 0) alterationCount = 2;
-		else if (strcmp(key->noteClass, "A") == 0) alterationCount = 3;
-		else if (strcmp(key->noteClass, "E") == 0) alterationCount = 4;
-		else if (strcmp(key->noteClass, "B") == 0) alterationCount = 5;
-		else if (strcmp(key->noteClass, "F") == 0) alterationCount = -1;
-	}
-	else {
-		if (strcmp(key->noteClass, "A") == 0) alterationCount = 0;
-		else if (strcmp(key->noteClass, "E") == 0) alterationCount = 1;
-		else if (strcmp(key->noteClass, "B") == 0) alterationCount = 2;
-		else if (strcmp(key->noteClass, "D") == 0) alterationCount = -1;
-		else if (strcmp(key->noteClass, "G") == 0) alterationCount = -2;
-		else if (strcmp(key->noteClass, "C") == 0) alterationCount = -3;
-		else if (strcmp(key->noteClass, "F") == 0) alterationCount = -4;
-	}
-	if (alterationCount > 0) {
-		for (int index = 0; index < alterationCount; ++index) {
-			if (sharpOrder[index] == noteClass) {
-				return 1;
-			}
-		}
-	}
-	if (alterationCount < 0) {
-		for (int index = 0; index < -alterationCount; ++index) {
-			if (flatOrder[index] == noteClass) {
-				return -1;
-			}
-		}
-	}
-	return 0;
-}
-
 static int _getNextMelodicChannel(int currentChannel) {
 	int nextChannel = currentChannel + 1;
 	if (nextChannel == 9) {
 		nextChannel += 1;
 	}
 	return nextChannel;
-}
-
-static int _getPitchBaseSemitone(char noteClass) {
-	switch (noteClass) {
-		case 'C':
-			return 0;
-		case 'D':
-			return 2;
-		case 'E':
-			return 4;
-		case 'F':
-			return 5;
-		case 'G':
-			return 7;
-		case 'A':
-			return 9;
-		case 'B':
-			return 11;
-		default:
-			return 0;
-	}
 }
 
 static CompilationStatus _lowerConditional(Event * event, LoweringState * state, MusicEvent ** head, MusicEvent ** tail) {
@@ -700,30 +602,6 @@ static MusicEvent * _newMusicEvent(MusicEventType type) {
 		event->type = type;
 	}
 	return event;
-}
-
-static CompilationStatus _parseMidiPitch(const char * pitch, MusicKey * key, int * midiPitch) {
-	size_t length = strlen(pitch);
-	int semitone = _getPitchBaseSemitone(pitch[0]);
-	int octave = 0;
-	if (length == 3) {
-		if (pitch[1] == '#') {
-			semitone += 1;
-		}
-		else if (pitch[1] == 'b') {
-			semitone -= 1;
-		}
-		else if (pitch[1] != 'n') {
-			semitone += _getKeySignatureAdjustment(key, pitch[0]);
-		}
-		octave = pitch[2] - '0';
-	}
-	else {
-		semitone += _getKeySignatureAdjustment(key, pitch[0]);
-		octave = pitch[1] - '0';
-	}
-	*midiPitch = ((octave + 1) * 12) + semitone;
-	return SUCCEEDED;
 }
 
 static CompilationStatus _populateCompositionSettings(Program * program, MusicComposition * composition) {

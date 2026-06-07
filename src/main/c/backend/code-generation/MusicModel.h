@@ -74,6 +74,7 @@ struct MusicComposition {
 	MusicTrack * tracks;
 };
 
+int pitchToMidiNumber(const char * pitch, const MusicKey * key);
 void destroyMusicComposition(MusicComposition * composition);
 void destroyMusicEventList(MusicEvent * events);
 void destroyMusicNoteList(MusicNoteList * notes);
