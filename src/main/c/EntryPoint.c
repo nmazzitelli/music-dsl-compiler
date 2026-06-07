@@ -1,4 +1,5 @@
 #include "backend/code-generation/Generator.h"
+#include "backend/code-generation/MusicModel.h"
 #include "backend/domain-specific/SemanticAnalyzer.h"
 #include "frontend/Frontend.h"
 #include "frontend/lexical-analysis/FlexActions.h"
@@ -21,6 +22,7 @@ const int main(const int length, const char ** arguments) {
 	}
 	CompilerState compilerState = {
 		.abstractSyntaxtTree = NULL,
+		.musicComposition = NULL,
 		.value = 0
 	};
 	ModuleDestructor moduleDestructors[] = {
@@ -44,8 +46,12 @@ const int main(const int length, const char ** arguments) {
 		compilationStatus = FAILED;
 	}
 	if (compilationStatus == SUCCEEDED) {
-		executeGenerator(&compilerState);
+		compilationStatus = executeGenerator(&compilerState);
+		if (compilationStatus != SUCCEEDED) {
+			logError(logger, "The code-generation phase rejects the input program.");
+		}
 	}
+	destroyMusicComposition(compilerState.musicComposition);
 	logDebugging(logger, "Releasing AST resources...");
 	destroyProgram(program);
 	for (int k = (sizeof(moduleDestructors)/sizeof(ModuleDestructor)) - 1; 0 <= k; --k) {
