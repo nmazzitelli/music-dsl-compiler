@@ -1,4 +1,5 @@
 #include "Generator.h"
+#include "MidiWriter.h"
 #include <string.h>
 
 /* MODULE INTERNAL STATE */
@@ -677,6 +678,10 @@ CompilationStatus executeGenerator(CompilerState * compilerState) {
 	compilerState->musicComposition = NULL;
 	if (_lowerProgram(program, &compilerState->musicComposition) != SUCCEEDED) {
 		logError(_logger, "Generator failed while lowering the AST.");
+		return FAILED;
+	}
+	if (!writeMidiFile(compilerState->musicComposition, "output.mid")) {
+		logError(_logger, "Generator failed while writing the MIDI file.");
 		return FAILED;
 	}
 	logDebugging(_logger, "Generation is done.");
