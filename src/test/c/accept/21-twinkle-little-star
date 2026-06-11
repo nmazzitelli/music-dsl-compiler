@@ -1,0 +1,48 @@
+tempo 120
+time signature 4/4
+
+track melody instrument piano {
+    rest quarter
+    play C4 quarter
+    play C4 quarter
+    play G4 quarter
+    play G4 quarter
+    play A4 quarter
+    play A4 quarter
+    play G4 half
+    play F4 quarter
+    play F4 quarter
+    play E4 quarter
+    play E4 quarter
+    play D4 quarter
+    play D4 quarter
+    play C4 half
+    play G4 quarter
+    play G4 quarter
+    play F4 quarter
+    play F4 quarter
+    play E4 quarter
+    play E4 quarter
+    play D4 half
+    play G4 quarter
+    play G4 quarter
+    play F4 quarter
+    play F4 quarter
+    play E4 quarter
+    play E4 quarter
+    play D4 half
+    play C4 quarter
+    play C4 quarter
+    play G4 quarter
+    play G4 quarter
+    play A4 quarter
+    play A4 quarter
+    play G4 half
+    play F4 quarter
+    play F4 quarter
+    play E4 quarter
+    play E4 quarter
+    play D4 quarter
+    play D4 quarter
+    play C4 half
+}
