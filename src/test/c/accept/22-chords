@@ -1,0 +1,5 @@
+track chords instrument piano {
+   play [C4, E4, G4] half
+   rest quarter
+   play [D4, F4, A4] half
+}
