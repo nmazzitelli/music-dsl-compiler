@@ -65,6 +65,7 @@ static MusicKeyMode _musicKeyModeFromAst(ModeType mode);
 static MusicEvent * _newMusicEvent(MusicEventType type);
 static CompilationStatus _populateCompositionSettings(Program * program, MusicComposition * composition);
 static CompilationStatus _setRuntimeSymbol(RuntimeSymbol ** symbols, const char * name, RuntimeValue value);
+static TrackList * _reverseTrackList(TrackList * list);
 
 static void _appendMusicEvent(MusicEvent ** head, MusicEvent ** tail, MusicEvent * event) {
 	if (*head == NULL) {
@@ -494,6 +495,18 @@ static CompilationStatus _lowerEventList(EventList * events, LoweringState * sta
 	return _lowerEvent(events->event, state, head, tail);
 }
 
+static TrackList * _reverseTrackList(TrackList * list) {
+	TrackList * prev = NULL;
+	TrackList * current = list;
+	while (current != NULL) {
+		TrackList * next = current->next;
+		current->next = prev;
+		prev = current;
+		current = next;
+	}
+	return prev;
+}
+
 static CompilationStatus _lowerProgram(Program * program, MusicComposition ** composition) {
 	MusicComposition * loweredComposition = calloc(1, sizeof(MusicComposition));
 	MusicTrack * trackHead = NULL;
@@ -509,6 +522,7 @@ static CompilationStatus _lowerProgram(Program * program, MusicComposition ** co
 		destroyMusicComposition(loweredComposition);
 		return FAILED;
 	}
+	program->tracks = _reverseTrackList(program->tracks);
 	for (TrackList * currentTrack = program->tracks; currentTrack != NULL; currentTrack = currentTrack->next) {
 		MusicTrack * loweredTrack = NULL;
 		int channel = melodicChannel;
