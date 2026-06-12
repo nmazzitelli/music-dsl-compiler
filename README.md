@@ -4,7 +4,7 @@
 
 # Music DSL Compiler
 
-A compiler for a Music DSL built with Flex and Bison. It parses music programs and builds an AST.
+A compiler for a Music DSL built with Flex and Bison. It parses music programs, validates their semantics, and generates a Standard MIDI file.
 
 * [Requirements](#requirements)
 * [Quick Start](#quick-start)
@@ -76,6 +76,19 @@ bash src/main/bash/run.sh <program>
 ```
 
 where `<program>` is the path to the file that represents its entry-point.
+
+The compiler writes the generated MIDI file as `output.mid`.
+
+### Examples
+
+Source examples live under `examples/`:
+
+```bash
+bash src/main/bash/run.sh examples/twinkle-little-star.music
+bash src/main/bash/run.sh examples/bright-scale.music
+```
+
+Generated MIDI files are build artifacts. Keep them outside version control, for example under `out/`.
 
 ### Run tests
 

@@ -1,0 +1,40 @@
+tempo 132
+time signature 4/4
+key C major
+
+track melody instrument piano {
+    play C4 eighth velocity 105
+    play D4 eighth velocity 105
+    play E4 eighth velocity 105
+    play G4 eighth velocity 110
+    play E4 quarter velocity 100
+    rest eighth
+    play D4 eighth velocity 95
+    play C4 half velocity 110
+
+    repeat 2 {
+        play E4 eighth velocity 95
+        play G4 eighth velocity 100
+        play A4 eighth velocity 105
+        play G4 eighth velocity 100
+    }
+
+    play C5 half velocity 115
+}
+
+track harmony instrument guitar {
+    play [C3, E3, G3] half velocity 72
+    play [F3, A3, C4] half velocity 72
+    play [G3, B3, D4] half velocity 76
+    play [C3, E3, G3] half velocity 80
+}
+
+track bassline instrument bass {
+    play C2 quarter velocity 90
+    rest quarter
+    play F2 quarter velocity 90
+    rest quarter
+    play G2 quarter velocity 92
+    rest quarter
+    play C2 half velocity 95
+}
