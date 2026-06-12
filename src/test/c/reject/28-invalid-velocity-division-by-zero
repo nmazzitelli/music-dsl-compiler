@@ -1,0 +1,3 @@
+track t instrument piano {
+    play C4 quarter velocity 10 / 0
+}

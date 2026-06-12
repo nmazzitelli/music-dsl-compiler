@@ -9,6 +9,8 @@ typedef enum SemanticType SemanticType;
 struct Symbol {
 	const char * name;
 	VarType type;
+	bool hasIntValue;
+	int intValue;
 	Symbol * next;
 };
 
@@ -29,8 +31,9 @@ static CompilationStatus _analyzeExpression(Expression * expression, Symbol * sy
 static CompilationStatus _analyzeGlobalSetting(GlobalSetting * setting);
 static CompilationStatus _analyzeProgram(Program * program);
 static CompilationStatus _analyzeTrack(Track * track, bool hasKey);
-static CompilationStatus _declareSymbol(Symbol ** symbols, const char * name, VarType type);
+static CompilationStatus _declareSymbol(Symbol ** symbols, const char * name, VarType type, bool hasIntValue, int intValue);
 static void _destroySymbols(Symbol * symbols);
+static CompilationStatus _evaluateIntegerExpression(Expression * expression, Symbol * symbols, int * result);
 static Symbol * _findSymbol(Symbol * symbols, const char * name);
 static SemanticType _inferExpressionType(Expression * expression, Symbol * symbols);
 static bool _isCompatibleVarType(VarType varType, SemanticType semanticType);
@@ -161,7 +164,7 @@ static bool _isCompatibleVarType(VarType varType, SemanticType semanticType) {
 	return _semanticTypeFromVarType(varType) == semanticType;
 }
 
-static CompilationStatus _declareSymbol(Symbol ** symbols, const char * name, VarType type) {
+static CompilationStatus _declareSymbol(Symbol ** symbols, const char * name, VarType type, bool hasIntValue, int intValue) {
 	Symbol * symbol = NULL;
 	if (_findSymbol(*symbols, name) != NULL) {
 		logError(_logger, "Variable \"%s\" is already declared in this track.", name);
@@ -170,6 +173,8 @@ static CompilationStatus _declareSymbol(Symbol ** symbols, const char * name, Va
 	symbol = calloc(1, sizeof(Symbol));
 	symbol->name = name;
 	symbol->type = type;
+	symbol->hasIntValue = hasIntValue;
+	symbol->intValue = intValue;
 	symbol->next = *symbols;
 	*symbols = symbol;
 	return SUCCEEDED;
@@ -310,6 +315,61 @@ static SemanticType _inferExpressionType(Expression * expression, Symbol * symbo
 	}
 }
 
+static CompilationStatus _evaluateIntegerExpression(Expression * expression, Symbol * symbols, int * result) {
+	int leftValue = 0;
+	int rightValue = 0;
+	Symbol * symbol = NULL;
+	if (expression == NULL || result == NULL) {
+		return FAILED;
+	}
+	switch (expression->type) {
+		case EXPR_INTEGER:
+			*result = expression->intValue;
+			return SUCCEEDED;
+		case EXPR_IDENTIFIER:
+			symbol = _findSymbol(symbols, expression->stringValue);
+			if (symbol == NULL || symbol->type != VAR_INTEGER || !symbol->hasIntValue) {
+				return FAILED;
+			}
+			*result = symbol->intValue;
+			return SUCCEEDED;
+		case EXPR_ADD:
+			if (_evaluateIntegerExpression(expression->left, symbols, &leftValue) != SUCCEEDED ||
+				_evaluateIntegerExpression(expression->right, symbols, &rightValue) != SUCCEEDED) {
+				return FAILED;
+			}
+			*result = leftValue + rightValue;
+			return SUCCEEDED;
+		case EXPR_SUB:
+			if (_evaluateIntegerExpression(expression->left, symbols, &leftValue) != SUCCEEDED ||
+				_evaluateIntegerExpression(expression->right, symbols, &rightValue) != SUCCEEDED) {
+				return FAILED;
+			}
+			*result = leftValue - rightValue;
+			return SUCCEEDED;
+		case EXPR_MUL:
+			if (_evaluateIntegerExpression(expression->left, symbols, &leftValue) != SUCCEEDED ||
+				_evaluateIntegerExpression(expression->right, symbols, &rightValue) != SUCCEEDED) {
+				return FAILED;
+			}
+			*result = leftValue * rightValue;
+			return SUCCEEDED;
+		case EXPR_DIV:
+			if (_evaluateIntegerExpression(expression->left, symbols, &leftValue) != SUCCEEDED ||
+				_evaluateIntegerExpression(expression->right, symbols, &rightValue) != SUCCEEDED) {
+				return FAILED;
+			}
+			if (rightValue == 0) {
+				logError(_logger, "Integer division by zero.");
+				return FAILED;
+			}
+			*result = leftValue / rightValue;
+			return SUCCEEDED;
+		default:
+			return FAILED;
+	}
+}
+
 static CompilationStatus _analyzeExpression(Expression * expression, Symbol * symbols) {
 	return _inferExpressionType(expression, symbols) == SEM_TYPE_ERROR ? FAILED : SUCCEEDED;
 }
@@ -326,6 +386,7 @@ static CompilationStatus _validateChordPitches(ChordNoteList * notes, bool hasKe
 
 static CompilationStatus _validateVelocity(Expression * velocity, Symbol * symbols) {
 	SemanticType velocityType = SEM_TYPE_ERROR;
+	int velocityValue = 0;
 	if (velocity == NULL) {
 		return SUCCEEDED;
 	}
@@ -337,8 +398,11 @@ static CompilationStatus _validateVelocity(Expression * velocity, Symbol * symbo
 		logError(_logger, "Velocity expressions must be integer.");
 		return FAILED;
 	}
-	if (velocity->type == EXPR_INTEGER && (velocity->intValue < 0 || velocity->intValue > 127)) {
-		logError(_logger, "Velocity %d is outside the MIDI range.", velocity->intValue);
+	if (_evaluateIntegerExpression(velocity, symbols, &velocityValue) != SUCCEEDED) {
+		return FAILED;
+	}
+	if (velocityValue < 0 || velocityValue > 127) {
+		logError(_logger, "Velocity %d is outside the MIDI range.", velocityValue);
 		return FAILED;
 	}
 	return SUCCEEDED;
@@ -379,6 +443,8 @@ static CompilationStatus _analyzeEvent(Event * event, Symbol ** symbols, bool ha
 		}
 		case EVENT_VAR_DECL: {
 			SemanticType valueType = _inferExpressionType(event->varDecl.value, *symbols);
+			bool hasIntValue = false;
+			int intValue = 0;
 			if (valueType == SEM_TYPE_ERROR) {
 				return FAILED;
 			}
@@ -392,7 +458,13 @@ static CompilationStatus _analyzeEvent(Event * event, Symbol ** symbols, bool ha
 				);
 				return FAILED;
 			}
-			return _declareSymbol(symbols, event->varDecl.name, event->varDecl.varType);
+			if (event->varDecl.varType == VAR_INTEGER) {
+				if (_evaluateIntegerExpression(event->varDecl.value, *symbols, &intValue) != SUCCEEDED) {
+					return FAILED;
+				}
+				hasIntValue = true;
+			}
+			return _declareSymbol(symbols, event->varDecl.name, event->varDecl.varType, hasIntValue, intValue);
 		}
 		case EVENT_REST:
 			return SUCCEEDED;
