@@ -77,7 +77,8 @@ bash src/main/bash/run.sh <program>
 
 where `<program>` is the path to the file that represents its entry-point.
 
-The compiler writes the generated MIDI file as `output.mid`.
+The compiler writes the generated MIDI file under `out/` using the input filename,
+for example `examples/tetris.music` becomes `out/tetris.midi`.
 
 ### Examples
 
@@ -86,9 +87,10 @@ Source examples live under `examples/`:
 ```bash
 bash src/main/bash/run.sh examples/twinkle-little-star.music
 bash src/main/bash/run.sh examples/bright-scale.music
+bash src/main/bash/run.sh examples/tetris.music
 ```
 
-Generated MIDI files are build artifacts. Keep them outside version control, for example under `out/`.
+Generated MIDI files are build artifacts and are ignored under `out/`.
 
 ### Run tests
 
