@@ -1,0 +1,91 @@
+tempo 156
+time signature 4/4
+
+track lead instrument piano {
+    repeat 2 {
+        play E4 quarter velocity 118
+        play E4 eighth velocity 112
+        play G#4 eighth velocity 124
+        play B4 quarter velocity 126
+        play G#4 eighth velocity 116
+        play E4 eighth velocity 112
+
+        play A4 quarter velocity 122
+        play A4 eighth velocity 116
+        play C5 eighth velocity 126
+        play E5 quarter velocity 127
+        play D5 eighth velocity 120
+        play C5 eighth velocity 116
+
+        play B4 quarter velocity 122
+        play B4 eighth velocity 116
+        play C5 eighth velocity 126
+        play D5 quarter velocity 124
+        play E5 quarter velocity 127
+
+        play C5 quarter velocity 122
+        play A4 quarter velocity 116
+        play A4 half velocity 118
+    }
+
+    repeat 2 {
+        play F5 quarter velocity 126
+        play F5 eighth velocity 120
+        play G5 eighth velocity 127
+        play A5 quarter velocity 127
+        play G5 eighth velocity 122
+        play F5 eighth velocity 118
+
+        play E5 quarter velocity 124
+        play E5 eighth velocity 118
+        play F5 eighth velocity 126
+        play E5 quarter velocity 122
+        play D5 eighth velocity 116
+        play C5 eighth velocity 112
+
+        play B4 quarter velocity 120
+        play B4 eighth velocity 114
+        play C5 eighth velocity 124
+        play D5 quarter velocity 126
+        play E5 quarter velocity 127
+
+        play C5 quarter velocity 122
+        play A4 quarter velocity 116
+        play A4 half velocity 120
+    }
+}
+
+track harmony instrument flute {
+    repeat 4 {
+        play [A3, C4, E4] half velocity 76
+        play [E3, G#3, B3] half velocity 74
+        play [F3, A3, C4] half velocity 78
+        play [E3, G#3, B3] half velocity 76
+    }
+}
+
+track bassline instrument bass {
+    repeat 8 {
+        play A2 eighth velocity 112
+        rest eighth
+        play E2 eighth velocity 104
+        play A2 eighth velocity 112
+        play C3 eighth velocity 108
+        rest eighth
+        play E2 eighth velocity 104
+        play A2 eighth velocity 114
+    }
+}
+
+track drums instrument drums {
+    repeat 16 {
+        play C3 eighth velocity 118
+        play C3 eighth velocity 70
+        play D3 eighth velocity 98
+        play C3 eighth velocity 76
+        play C3 eighth velocity 112
+        play D3 eighth velocity 104
+        play C3 eighth velocity 82
+        play D3 eighth velocity 110
+    }
+}
