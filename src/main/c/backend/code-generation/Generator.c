@@ -546,9 +546,17 @@ static CompilationStatus _lowerProgram(Program * program, MusicComposition ** co
 			channel = 9;
 		}
 		else {
+			/* Melodic tracks may only use channels 0-8 and 10-15 (channel 9 is reserved for drums). */
+			if (channel > 15) {
+				logError(_logger, "Too many melodic tracks: MIDI supports at most 15 non-drums channels (0-8 and 10-15).");
+				loweredComposition->tracks = trackHead;
+				destroyMusicComposition(loweredComposition);
+				return FAILED;
+			}
 			melodicChannel = _getNextMelodicChannel(melodicChannel);
 		}
 		if (_lowerTrack(currentTrack->track, &loweredComposition->key, channel, &loweredTrack) != SUCCEEDED) {
+			loweredComposition->tracks = trackHead;
 			destroyMusicComposition(loweredComposition);
 			return FAILED;
 		}

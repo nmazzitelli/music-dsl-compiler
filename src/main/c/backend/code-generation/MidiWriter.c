@@ -71,6 +71,10 @@ static bool _appendByte(ByteBuffer * buffer, uint8_t value) {
 static bool _appendVLQ(ByteBuffer * buffer, uint32_t value) {
 	uint8_t bytes[4];
 	size_t byteCount = 0;
+	/* A standard MIDI VLQ holds at most 28 bits (four 7-bit groups); larger values would overflow bytes[4]. */
+	if (value > 0x0FFFFFFF) {
+		return false;
+	}
 	bytes[3] = (uint8_t) (value & 0x7F);
 	byteCount = 1;
 	value >>= 7;

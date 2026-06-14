@@ -1,0 +1,14 @@
+tempo 120
+time signature 4/4
+key C major
+
+track scale instrument piano {
+    play C4 quarter
+    play D4 quarter
+    play E4 quarter
+    play F4 quarter
+    play G4 quarter
+    play A4 quarter
+    play B4 quarter
+    play C5 quarter
+}
