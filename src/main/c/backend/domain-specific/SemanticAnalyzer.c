@@ -4,6 +4,7 @@
 /* MODULE INTERNAL STATE */
 
 typedef struct Symbol Symbol;
+typedef struct Scope Scope;
 typedef enum SemanticType SemanticType;
 
 struct Symbol {
@@ -12,6 +13,12 @@ struct Symbol {
 	bool hasIntValue;
 	int intValue;
 	Symbol * next;
+};
+
+/* A lexical scope: variables declared in this block plus a link to the enclosing scope. */
+struct Scope {
+	Symbol * symbols;
+	Scope * parent;
 };
 
 enum SemanticType {
@@ -25,18 +32,18 @@ static Logger * _logger = NULL;
 
 /* PRIVATE FUNCTIONS */
 
-static CompilationStatus _analyzeEvent(Event * event, Symbol ** symbols, bool hasKey);
-static CompilationStatus _analyzeEventList(EventList * events, Symbol ** symbols, bool hasKey);
-static CompilationStatus _analyzeExpression(Expression * expression, Symbol * symbols);
+static CompilationStatus _analyzeEvent(Event * event, Scope * scope, bool hasKey);
+static CompilationStatus _analyzeEventList(EventList * events, Scope * scope, bool hasKey);
+static CompilationStatus _analyzeExpression(Expression * expression, Scope * symbols);
 static CompilationStatus _analyzeGlobalSetting(GlobalSetting * setting);
 static CompilationStatus _analyzeProgram(Program * program);
 static CompilationStatus _analyzeTrack(Track * track, bool hasKey);
-static CompilationStatus _declareSymbol(Symbol ** symbols, const char * name, VarType type, bool hasIntValue, int intValue);
+static CompilationStatus _declareSymbol(Scope * scope, const char * name, VarType type, bool hasIntValue, int intValue);
 static void _destroySymbols(Symbol * symbols);
-static CompilationStatus _evaluateIntegerExpression(Expression * expression, Symbol * symbols, int * result);
-static CompilationStatus _validateNoConstantDivisionByZero(Expression * expression, Symbol * symbols);
-static Symbol * _findSymbol(Symbol * symbols, const char * name);
-static SemanticType _inferExpressionType(Expression * expression, Symbol * symbols);
+static CompilationStatus _evaluateIntegerExpression(Expression * expression, Scope * symbols, int * result);
+static CompilationStatus _validateNoConstantDivisionByZero(Expression * expression, Scope * symbols);
+static Symbol * _findSymbol(Scope * symbols, const char * name);
+static SemanticType _inferExpressionType(Expression * expression, Scope * symbols);
 static bool _isCompatibleVarType(VarType varType, SemanticType semanticType);
 static bool _programHasKey(Program * program);
 static const char * _semanticTypeName(SemanticType semanticType);
@@ -44,7 +51,7 @@ static SemanticType _semanticTypeFromVarType(VarType varType);
 static CompilationStatus _validateChordPitches(ChordNoteList * notes, bool hasKey);
 static CompilationStatus _validatePitch(const char * pitch, bool hasKey);
 static CompilationStatus _validateUniqueTrackNames(TrackList * tracks);
-static CompilationStatus _validateVelocity(Expression * velocity, Symbol * symbols);
+static CompilationStatus _validateVelocity(Expression * velocity, Scope * symbols);
 static bool _isValidPitchAccidental(char accidental);
 static bool _isValidPitchNoteClass(char noteClass);
 static bool _isValidKeyNoteClass(const char * noteClass);
@@ -126,10 +133,12 @@ static bool _isSupportedInstrument(const char * instrument) {
 	return false;
 }
 
-static Symbol * _findSymbol(Symbol * symbols, const char * name) {
-	for (Symbol * currentSymbol = symbols; currentSymbol != NULL; currentSymbol = currentSymbol->next) {
-		if (strcmp(currentSymbol->name, name) == 0) {
-			return currentSymbol;
+static Symbol * _findSymbol(Scope * symbols, const char * name) {
+	for (Scope * scope = symbols; scope != NULL; scope = scope->parent) {
+		for (Symbol * currentSymbol = scope->symbols; currentSymbol != NULL; currentSymbol = currentSymbol->next) {
+			if (strcmp(currentSymbol->name, name) == 0) {
+				return currentSymbol;
+			}
 		}
 	}
 	return NULL;
@@ -165,19 +174,22 @@ static bool _isCompatibleVarType(VarType varType, SemanticType semanticType) {
 	return _semanticTypeFromVarType(varType) == semanticType;
 }
 
-static CompilationStatus _declareSymbol(Symbol ** symbols, const char * name, VarType type, bool hasIntValue, int intValue) {
+static CompilationStatus _declareSymbol(Scope * scope, const char * name, VarType type, bool hasIntValue, int intValue) {
 	Symbol * symbol = NULL;
-	if (_findSymbol(*symbols, name) != NULL) {
-		logError(_logger, "Variable \"%s\" is already declared in this track.", name);
-		return FAILED;
+	/* Only the current scope is checked for conflicts, so the same name may shadow or be reused in sibling blocks. */
+	for (Symbol * currentSymbol = scope->symbols; currentSymbol != NULL; currentSymbol = currentSymbol->next) {
+		if (strcmp(currentSymbol->name, name) == 0) {
+			logError(_logger, "Variable \"%s\" is already declared in this scope.", name);
+			return FAILED;
+		}
 	}
 	symbol = calloc(1, sizeof(Symbol));
 	symbol->name = name;
 	symbol->type = type;
 	symbol->hasIntValue = hasIntValue;
 	symbol->intValue = intValue;
-	symbol->next = *symbols;
-	*symbols = symbol;
+	symbol->next = scope->symbols;
+	scope->symbols = symbol;
 	return SUCCEEDED;
 }
 
@@ -227,7 +239,7 @@ static CompilationStatus _validatePitch(const char * pitch, bool hasKey) {
 	return SUCCEEDED;
 }
 
-static SemanticType _inferExpressionType(Expression * expression, Symbol * symbols) {
+static SemanticType _inferExpressionType(Expression * expression, Scope * symbols) {
 	SemanticType leftType = SEM_TYPE_ERROR;
 	SemanticType rightType = SEM_TYPE_ERROR;
 	if (expression == NULL) {
@@ -316,7 +328,7 @@ static SemanticType _inferExpressionType(Expression * expression, Symbol * symbo
 	}
 }
 
-static CompilationStatus _evaluateIntegerExpression(Expression * expression, Symbol * symbols, int * result) {
+static CompilationStatus _evaluateIntegerExpression(Expression * expression, Scope * symbols, int * result) {
 	int leftValue = 0;
 	int rightValue = 0;
 	Symbol * symbol = NULL;
@@ -372,7 +384,7 @@ static CompilationStatus _evaluateIntegerExpression(Expression * expression, Sym
 }
 
 /* Rejects integer divisions whose divisor folds to a constant zero. */
-static CompilationStatus _validateNoConstantDivisionByZero(Expression * expression, Symbol * symbols) {
+static CompilationStatus _validateNoConstantDivisionByZero(Expression * expression, Scope * symbols) {
 	if (expression == NULL) {
 		return SUCCEEDED;
 	}
@@ -403,7 +415,7 @@ static CompilationStatus _validateNoConstantDivisionByZero(Expression * expressi
 	}
 }
 
-static CompilationStatus _analyzeExpression(Expression * expression, Symbol * symbols) {
+static CompilationStatus _analyzeExpression(Expression * expression, Scope * symbols) {
 	return _inferExpressionType(expression, symbols) == SEM_TYPE_ERROR ? FAILED : SUCCEEDED;
 }
 
@@ -417,7 +429,7 @@ static CompilationStatus _validateChordPitches(ChordNoteList * notes, bool hasKe
 	return SUCCEEDED;
 }
 
-static CompilationStatus _validateVelocity(Expression * velocity, Symbol * symbols) {
+static CompilationStatus _validateVelocity(Expression * velocity, Scope * symbols) {
 	SemanticType velocityType = SEM_TYPE_ERROR;
 	int velocityValue = 0;
 	if (velocity == NULL) {
@@ -441,47 +453,56 @@ static CompilationStatus _validateVelocity(Expression * velocity, Symbol * symbo
 	return SUCCEEDED;
 }
 
-static CompilationStatus _analyzeEvent(Event * event, Symbol ** symbols, bool hasKey) {
+static CompilationStatus _analyzeEvent(Event * event, Scope * scope, bool hasKey) {
 	switch (event->type) {
 		case EVENT_NOTE: {
 			CompilationStatus status = _validatePitch(event->note.pitch, hasKey);
 			if (status != SUCCEEDED) {
 				return status;
 			}
-			return _validateVelocity(event->note.velocity, *symbols);
+			return _validateVelocity(event->note.velocity, scope);
 		}
 		case EVENT_CHORD: {
 			CompilationStatus status = _validateChordPitches(event->chord.notes, hasKey);
 			if (status != SUCCEEDED) {
 				return status;
 			}
-			return _validateVelocity(event->chord.velocity, *symbols);
+			return _validateVelocity(event->chord.velocity, scope);
 		}
-		case EVENT_REPEAT:
-			if (_inferExpressionType(event->repeat.count, *symbols) != SEM_TYPE_INTEGER) {
+		case EVENT_REPEAT: {
+			if (_inferExpressionType(event->repeat.count, scope) != SEM_TYPE_INTEGER) {
 				logError(_logger, "Repeat expressions must be integer.");
 				return FAILED;
 			}
-			if (_validateNoConstantDivisionByZero(event->repeat.count, *symbols) != SUCCEEDED) {
+			if (_validateNoConstantDivisionByZero(event->repeat.count, scope) != SUCCEEDED) {
 				return FAILED;
 			}
-			return _analyzeEventList(event->repeat.body, symbols, hasKey);
+			Scope bodyScope = {.symbols = NULL, .parent = scope};
+			CompilationStatus status = _analyzeEventList(event->repeat.body, &bodyScope, hasKey);
+			_destroySymbols(bodyScope.symbols);
+			return status;
+		}
 		case EVENT_IF: {
-			if (_inferExpressionType(event->ifStatement.condition, *symbols) != SEM_TYPE_BOOLEAN) {
+			if (_inferExpressionType(event->ifStatement.condition, scope) != SEM_TYPE_BOOLEAN) {
 				logError(_logger, "If conditions must be boolean.");
 				return FAILED;
 			}
-			if (_validateNoConstantDivisionByZero(event->ifStatement.condition, *symbols) != SUCCEEDED) {
+			if (_validateNoConstantDivisionByZero(event->ifStatement.condition, scope) != SUCCEEDED) {
 				return FAILED;
 			}
-			CompilationStatus status = _analyzeEventList(event->ifStatement.thenBody, symbols, hasKey);
+			Scope thenScope = {.symbols = NULL, .parent = scope};
+			CompilationStatus status = _analyzeEventList(event->ifStatement.thenBody, &thenScope, hasKey);
+			_destroySymbols(thenScope.symbols);
 			if (status != SUCCEEDED) {
 				return status;
 			}
-			return _analyzeEventList(event->ifStatement.elseBody, symbols, hasKey);
+			Scope elseScope = {.symbols = NULL, .parent = scope};
+			status = _analyzeEventList(event->ifStatement.elseBody, &elseScope, hasKey);
+			_destroySymbols(elseScope.symbols);
+			return status;
 		}
 		case EVENT_VAR_DECL: {
-			SemanticType valueType = _inferExpressionType(event->varDecl.value, *symbols);
+			SemanticType valueType = _inferExpressionType(event->varDecl.value, scope);
 			bool hasIntValue = false;
 			int intValue = 0;
 			if (valueType == SEM_TYPE_ERROR) {
@@ -498,12 +519,12 @@ static CompilationStatus _analyzeEvent(Event * event, Symbol ** symbols, bool ha
 				return FAILED;
 			}
 			if (event->varDecl.varType == VAR_INTEGER) {
-				if (_evaluateIntegerExpression(event->varDecl.value, *symbols, &intValue) != SUCCEEDED) {
+				if (_evaluateIntegerExpression(event->varDecl.value, scope, &intValue) != SUCCEEDED) {
 					return FAILED;
 				}
 				hasIntValue = true;
 			}
-			return _declareSymbol(symbols, event->varDecl.name, event->varDecl.varType, hasIntValue, intValue);
+			return _declareSymbol(scope, event->varDecl.name, event->varDecl.varType, hasIntValue, intValue);
 		}
 		case EVENT_REST:
 			return SUCCEEDED;
@@ -513,28 +534,28 @@ static CompilationStatus _analyzeEvent(Event * event, Symbol ** symbols, bool ha
 	}
 }
 
-static CompilationStatus _analyzeEventList(EventList * events, Symbol ** symbols, bool hasKey) {
+static CompilationStatus _analyzeEventList(EventList * events, Scope * scope, bool hasKey) {
 	CompilationStatus status = SUCCEEDED;
 	if (events == NULL) {
 		return SUCCEEDED;
 	}
-	status = _analyzeEventList(events->next, symbols, hasKey);
+	status = _analyzeEventList(events->next, scope, hasKey);
 	if (status != SUCCEEDED) {
 		return status;
 	}
-	return _analyzeEvent(events->event, symbols, hasKey);
+	return _analyzeEvent(events->event, scope, hasKey);
 }
 
 static CompilationStatus _analyzeTrack(Track * track, bool hasKey) {
-	Symbol * symbols = NULL;
+	Scope scope = {.symbols = NULL, .parent = NULL};
 	CompilationStatus status = SUCCEEDED;
 	logDebugging(_logger, "Visiting track \"%s\".", track->name);
 	if (!_isSupportedInstrument(track->instrument)) {
 		logError(_logger, "Unsupported instrument \"%s\" in track \"%s\".", track->instrument, track->name);
 		return FAILED;
 	}
-	status = _analyzeEventList(track->events, &symbols, hasKey);
-	_destroySymbols(symbols);
+	status = _analyzeEventList(track->events, &scope, hasKey);
+	_destroySymbols(scope.symbols);
 	return status;
 }
 

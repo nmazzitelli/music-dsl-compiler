@@ -7,6 +7,7 @@
 typedef enum RuntimeValueType RuntimeValueType;
 typedef struct RuntimeValue RuntimeValue;
 typedef struct RuntimeSymbol RuntimeSymbol;
+typedef struct RuntimeScope RuntimeScope;
 typedef struct LoweringState LoweringState;
 
 enum RuntimeValueType {
@@ -30,8 +31,14 @@ struct RuntimeSymbol {
 	RuntimeSymbol * next;
 };
 
-struct LoweringState {
+/* A runtime scope mirrors the semantic scope chain so blocks bind variables locally. */
+struct RuntimeScope {
 	RuntimeSymbol * symbols;
+	RuntimeScope * parent;
+};
+
+struct LoweringState {
+	RuntimeScope * scope;
 	MusicKey * key;
 };
 
@@ -47,10 +54,10 @@ static CompilationStatus _createChordEvent(Event * event, LoweringState * state,
 static MusicEvent * _createRestEvent(DurationType duration);
 static CompilationStatus _createNoteEvent(Event * event, LoweringState * state, MusicEvent ** musicEvent);
 static void _destroyRuntimeSymbols(RuntimeSymbol * symbols);
-static CompilationStatus _evaluateBoolean(Expression * expression, RuntimeSymbol * symbols, bool * result);
-static CompilationStatus _evaluateExpression(Expression * expression, RuntimeSymbol * symbols, RuntimeValue * result);
-static CompilationStatus _evaluateInteger(Expression * expression, RuntimeSymbol * symbols, int * result);
-static RuntimeSymbol * _findRuntimeSymbol(RuntimeSymbol * symbols, const char * name);
+static CompilationStatus _evaluateBoolean(Expression * expression, RuntimeScope * symbols, bool * result);
+static CompilationStatus _evaluateExpression(Expression * expression, RuntimeScope * symbols, RuntimeValue * result);
+static CompilationStatus _evaluateInteger(Expression * expression, RuntimeScope * symbols, int * result);
+static RuntimeSymbol * _findRuntimeSymbol(RuntimeScope * symbols, const char * name);
 static int _getDefaultVelocity();
 static int _getDurationTicks(DurationType duration);
 static int _getInstrumentProgram(const char * instrument);
@@ -64,7 +71,7 @@ static CompilationStatus _lowerTrack(Track * track, MusicKey * key, int channel,
 static MusicKeyMode _musicKeyModeFromAst(ModeType mode);
 static MusicEvent * _newMusicEvent(MusicEventType type);
 static CompilationStatus _populateCompositionSettings(Program * program, MusicComposition * composition);
-static CompilationStatus _setRuntimeSymbol(RuntimeSymbol ** symbols, const char * name, RuntimeValue value);
+static CompilationStatus _setRuntimeSymbol(RuntimeScope * scope, const char * name, RuntimeValue value);
 static TrackList * _reverseTrackList(TrackList * list);
 
 static void _appendMusicEvent(MusicEvent ** head, MusicEvent ** tail, MusicEvent * event) {
@@ -155,7 +162,7 @@ static CompilationStatus _createChordEvent(Event * event, LoweringState * state,
 		return OUT_OF_MEMORY;
 	}
 	if (event->chord.velocity != NULL) {
-		CompilationStatus status = _evaluateInteger(event->chord.velocity, state->symbols, &velocity);
+		CompilationStatus status = _evaluateInteger(event->chord.velocity, state->scope, &velocity);
 		if (status != SUCCEEDED) {
 			free(loweredEvent);
 			return status;
@@ -203,7 +210,7 @@ static CompilationStatus _createNoteEvent(Event * event, LoweringState * state, 
 	}
 	loweredEvent->note.midiPitch = pitchToMidiNumber(event->note.pitch, state->key);
 	if (event->note.velocity != NULL) {
-		CompilationStatus status = _evaluateInteger(event->note.velocity, state->symbols, &velocity);
+		CompilationStatus status = _evaluateInteger(event->note.velocity, state->scope, &velocity);
 		if (status != SUCCEEDED) {
 			free(loweredEvent);
 			return status;
@@ -223,7 +230,7 @@ static void _destroyRuntimeSymbols(RuntimeSymbol * symbols) {
 	}
 }
 
-static CompilationStatus _evaluateBoolean(Expression * expression, RuntimeSymbol * symbols, bool * result) {
+static CompilationStatus _evaluateBoolean(Expression * expression, RuntimeScope * symbols, bool * result) {
 	RuntimeValue value = {0};
 	CompilationStatus status = _evaluateExpression(expression, symbols, &value);
 	if (status != SUCCEEDED) {
@@ -237,7 +244,7 @@ static CompilationStatus _evaluateBoolean(Expression * expression, RuntimeSymbol
 	return SUCCEEDED;
 }
 
-static CompilationStatus _evaluateExpression(Expression * expression, RuntimeSymbol * symbols, RuntimeValue * result) {
+static CompilationStatus _evaluateExpression(Expression * expression, RuntimeScope * symbols, RuntimeValue * result) {
 	RuntimeValue leftValue = {0};
 	RuntimeValue rightValue = {0};
 	RuntimeSymbol * symbol = NULL;
@@ -366,7 +373,7 @@ static CompilationStatus _evaluateExpression(Expression * expression, RuntimeSym
 	return FAILED;
 }
 
-static CompilationStatus _evaluateInteger(Expression * expression, RuntimeSymbol * symbols, int * result) {
+static CompilationStatus _evaluateInteger(Expression * expression, RuntimeScope * symbols, int * result) {
 	RuntimeValue value = {0};
 	CompilationStatus status = _evaluateExpression(expression, symbols, &value);
 	if (status != SUCCEEDED) {
@@ -380,10 +387,12 @@ static CompilationStatus _evaluateInteger(Expression * expression, RuntimeSymbol
 	return SUCCEEDED;
 }
 
-static RuntimeSymbol * _findRuntimeSymbol(RuntimeSymbol * symbols, const char * name) {
-	for (RuntimeSymbol * currentSymbol = symbols; currentSymbol != NULL; currentSymbol = currentSymbol->next) {
-		if (strcmp(currentSymbol->name, name) == 0) {
-			return currentSymbol;
+static RuntimeSymbol * _findRuntimeSymbol(RuntimeScope * symbols, const char * name) {
+	for (RuntimeScope * scope = symbols; scope != NULL; scope = scope->parent) {
+		for (RuntimeSymbol * currentSymbol = scope->symbols; currentSymbol != NULL; currentSymbol = currentSymbol->next) {
+			if (strcmp(currentSymbol->name, name) == 0) {
+				return currentSymbol;
+			}
 		}
 	}
 	return NULL;
@@ -441,14 +450,17 @@ static int _getNextMelodicChannel(int currentChannel) {
 
 static CompilationStatus _lowerConditional(Event * event, LoweringState * state, MusicEvent ** head, MusicEvent ** tail) {
 	bool condition = false;
-	CompilationStatus status = _evaluateBoolean(event->ifStatement.condition, state->symbols, &condition);
+	CompilationStatus status = _evaluateBoolean(event->ifStatement.condition, state->scope, &condition);
 	if (status != SUCCEEDED) {
 		return status;
 	}
-	if (condition) {
-		return _lowerEventList(event->ifStatement.thenBody, state, head, tail);
-	}
-	return _lowerEventList(event->ifStatement.elseBody, state, head, tail);
+	RuntimeScope branchScope = {.symbols = NULL, .parent = state->scope};
+	EventList * branch = condition ? event->ifStatement.thenBody : event->ifStatement.elseBody;
+	state->scope = &branchScope;
+	status = _lowerEventList(branch, state, head, tail);
+	state->scope = branchScope.parent;
+	_destroyRuntimeSymbols(branchScope.symbols);
+	return status;
 }
 
 static CompilationStatus _lowerEvent(Event * event, LoweringState * state, MusicEvent ** head, MusicEvent ** tail) {
@@ -479,10 +491,10 @@ static CompilationStatus _lowerEvent(Event * event, LoweringState * state, Music
 		case EVENT_IF:
 			return _lowerConditional(event, state, head, tail);
 		case EVENT_VAR_DECL:
-			if (_evaluateExpression(event->varDecl.value, state->symbols, &value) != SUCCEEDED) {
+			if (_evaluateExpression(event->varDecl.value, state->scope, &value) != SUCCEEDED) {
 				return FAILED;
 			}
-			return _setRuntimeSymbol(&state->symbols, event->varDecl.name, value);
+			return _setRuntimeSymbol(state->scope, event->varDecl.name, value);
 	}
 	return FAILED;
 }
@@ -551,11 +563,15 @@ static CompilationStatus _lowerRepeat(Event * event, LoweringState * state, Musi
 	int repeatCount = 0;
 	MusicEvent * bodyHead = NULL;
 	MusicEvent * bodyTail = NULL;
-	CompilationStatus status = _evaluateInteger(event->repeat.count, state->symbols, &repeatCount);
+	CompilationStatus status = _evaluateInteger(event->repeat.count, state->scope, &repeatCount);
 	if (status != SUCCEEDED) {
 		return status;
 	}
+	RuntimeScope bodyScope = {.symbols = NULL, .parent = state->scope};
+	state->scope = &bodyScope;
 	status = _lowerEventList(event->repeat.body, state, &bodyHead, &bodyTail);
+	state->scope = bodyScope.parent;
+	_destroyRuntimeSymbols(bodyScope.symbols);
 	if (status != SUCCEEDED) {
 		destroyMusicEventList(bodyHead);
 		return status;
@@ -584,7 +600,8 @@ static CompilationStatus _lowerRepeat(Event * event, LoweringState * state, Musi
 }
 
 static CompilationStatus _lowerTrack(Track * track, MusicKey * key, int channel, MusicTrack ** musicTrack) {
-	LoweringState state = {.symbols = NULL, .key = key};
+	RuntimeScope rootScope = {.symbols = NULL, .parent = NULL};
+	LoweringState state = {.scope = &rootScope, .key = key};
 	MusicTrack * loweredTrack = calloc(1, sizeof(MusicTrack));
 	MusicEvent * eventHead = NULL;
 	MusicEvent * eventTail = NULL;
@@ -602,11 +619,11 @@ static CompilationStatus _lowerTrack(Track * track, MusicKey * key, int channel,
 		free(loweredTrack->name);
 		free(loweredTrack);
 		destroyMusicEventList(eventHead);
-		_destroyRuntimeSymbols(state.symbols);
+		_destroyRuntimeSymbols(rootScope.symbols);
 		return FAILED;
 	}
 	loweredTrack->events = eventHead;
-	_destroyRuntimeSymbols(state.symbols);
+	_destroyRuntimeSymbols(rootScope.symbols);
 	*musicTrack = loweredTrack;
 	return SUCCEEDED;
 }
@@ -647,20 +664,16 @@ static CompilationStatus _populateCompositionSettings(Program * program, MusicCo
 	return SUCCEEDED;
 }
 
-static CompilationStatus _setRuntimeSymbol(RuntimeSymbol ** symbols, const char * name, RuntimeValue value) {
-	RuntimeSymbol * symbol = _findRuntimeSymbol(*symbols, name);
-	if (symbol != NULL) {
-		symbol->value = value;
-		return SUCCEEDED;
-	}
-	symbol = calloc(1, sizeof(RuntimeSymbol));
+static CompilationStatus _setRuntimeSymbol(RuntimeScope * scope, const char * name, RuntimeValue value) {
+	/* Each declaration binds a fresh symbol in the current scope, shadowing any enclosing binding. */
+	RuntimeSymbol * symbol = calloc(1, sizeof(RuntimeSymbol));
 	if (symbol == NULL) {
 		return OUT_OF_MEMORY;
 	}
 	symbol->name = name;
 	symbol->value = value;
-	symbol->next = *symbols;
-	*symbols = symbol;
+	symbol->next = scope->symbols;
+	scope->symbols = symbol;
 	return SUCCEEDED;
 }
 

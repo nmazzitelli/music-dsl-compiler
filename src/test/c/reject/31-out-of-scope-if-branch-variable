@@ -1,0 +1,4 @@
+track t instrument piano {
+    if false then { integer x = 5 }
+    repeat x { play C4 quarter }
+}

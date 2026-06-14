@@ -1,0 +1,3 @@
+track t instrument piano {
+    if true then { integer x = 1 } else { integer x = 2 }
+}
