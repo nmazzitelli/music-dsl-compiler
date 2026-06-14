@@ -59,21 +59,18 @@ static bool _isValidTimeSignatureDenominator(int denominator);
 static bool _isSupportedInstrument(const char * instrument);
 
 static bool _isValidKeyNoteClass(const char * noteClass) {
-	static const char * validNoteClasses[] = {
-		"A",
-		"B",
-		"C",
-		"D",
-		"E",
-		"F",
-		"G"
-	};
-	for (size_t index = 0; index < sizeof(validNoteClasses) / sizeof(validNoteClasses[0]); ++index) {
-		if (strcmp(noteClass, validNoteClasses[index]) == 0) {
-			return true;
-		}
+	size_t length = strlen(noteClass);
+	if (length != 1 && length != 2) {
+		return false;
 	}
-	return false;
+	if (!_isValidPitchNoteClass(noteClass[0])) {
+		return false;
+	}
+	/* An optional accidental may follow the A-G letter: # (sharp) or b (flat). */
+	if (length == 2 && noteClass[1] != '#' && noteClass[1] != 'b') {
+		return false;
+	}
+	return true;
 }
 
 static bool _isValidPitchNoteClass(char noteClass) {

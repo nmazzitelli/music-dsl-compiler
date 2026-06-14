@@ -112,7 +112,7 @@ whitespace			[[:space:]]+
 ")"										{ return PunctuationLexemeAction(CLOSE_PAREN); }
 
 [A-G][#bn]?[0-9]						{ return PitchLexemeAction(); }
-[A-G]									{ return NoteClassLexemeAction(); }
+[A-G][#b]?								{ return NoteClassLexemeAction(); }
 
 [[:digit:]]+							{ return IntegerLexemeAction(); }
 \"[^\"]*\"								{ return StringLexemeAction(); }

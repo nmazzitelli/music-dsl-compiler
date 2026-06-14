@@ -1,0 +1,4 @@
+key Bb minor
+track t instrument piano {
+    play C4 quarter
+}

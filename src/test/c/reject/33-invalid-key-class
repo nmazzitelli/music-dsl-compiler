@@ -1,0 +1,4 @@
+key H major
+track t instrument piano {
+    play C4 quarter
+}

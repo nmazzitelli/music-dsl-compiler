@@ -1,0 +1,4 @@
+key F# major
+track t instrument piano {
+    play C4 quarter
+}
