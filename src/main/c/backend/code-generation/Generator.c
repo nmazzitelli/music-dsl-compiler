@@ -292,6 +292,10 @@ static CompilationStatus _evaluateExpression(Expression * expression, RuntimeSym
 					result->intValue = leftValue.intValue * rightValue.intValue;
 					break;
 				case EXPR_DIV:
+					if (rightValue.intValue == 0) {
+						logError(_logger, "Integer division by zero while lowering.");
+						return FAILED;
+					}
 					result->intValue = leftValue.intValue / rightValue.intValue;
 					break;
 				default:

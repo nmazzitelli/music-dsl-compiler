@@ -34,6 +34,7 @@ static CompilationStatus _analyzeTrack(Track * track, bool hasKey);
 static CompilationStatus _declareSymbol(Symbol ** symbols, const char * name, VarType type, bool hasIntValue, int intValue);
 static void _destroySymbols(Symbol * symbols);
 static CompilationStatus _evaluateIntegerExpression(Expression * expression, Symbol * symbols, int * result);
+static CompilationStatus _validateNoConstantDivisionByZero(Expression * expression, Symbol * symbols);
 static Symbol * _findSymbol(Symbol * symbols, const char * name);
 static SemanticType _inferExpressionType(Expression * expression, Symbol * symbols);
 static bool _isCompatibleVarType(VarType varType, SemanticType semanticType);
@@ -370,6 +371,38 @@ static CompilationStatus _evaluateIntegerExpression(Expression * expression, Sym
 	}
 }
 
+/* Rejects integer divisions whose divisor folds to a constant zero. */
+static CompilationStatus _validateNoConstantDivisionByZero(Expression * expression, Symbol * symbols) {
+	if (expression == NULL) {
+		return SUCCEEDED;
+	}
+	switch (expression->type) {
+		case EXPR_INTEGER:
+		case EXPR_BOOLEAN:
+		case EXPR_STRING:
+		case EXPR_IDENTIFIER:
+			return SUCCEEDED;
+		case EXPR_NOT:
+			return _validateNoConstantDivisionByZero(expression->operand, symbols);
+		case EXPR_DIV: {
+			int divisor = 0;
+			if (_evaluateIntegerExpression(expression->right, symbols, &divisor) == SUCCEEDED && divisor == 0) {
+				logError(_logger, "Integer division by zero.");
+				return FAILED;
+			}
+			if (_validateNoConstantDivisionByZero(expression->left, symbols) != SUCCEEDED) {
+				return FAILED;
+			}
+			return _validateNoConstantDivisionByZero(expression->right, symbols);
+		}
+		default:
+			if (_validateNoConstantDivisionByZero(expression->left, symbols) != SUCCEEDED) {
+				return FAILED;
+			}
+			return _validateNoConstantDivisionByZero(expression->right, symbols);
+	}
+}
+
 static CompilationStatus _analyzeExpression(Expression * expression, Symbol * symbols) {
 	return _inferExpressionType(expression, symbols) == SEM_TYPE_ERROR ? FAILED : SUCCEEDED;
 }
@@ -429,10 +462,16 @@ static CompilationStatus _analyzeEvent(Event * event, Symbol ** symbols, bool ha
 				logError(_logger, "Repeat expressions must be integer.");
 				return FAILED;
 			}
+			if (_validateNoConstantDivisionByZero(event->repeat.count, *symbols) != SUCCEEDED) {
+				return FAILED;
+			}
 			return _analyzeEventList(event->repeat.body, symbols, hasKey);
 		case EVENT_IF: {
 			if (_inferExpressionType(event->ifStatement.condition, *symbols) != SEM_TYPE_BOOLEAN) {
 				logError(_logger, "If conditions must be boolean.");
+				return FAILED;
+			}
+			if (_validateNoConstantDivisionByZero(event->ifStatement.condition, *symbols) != SUCCEEDED) {
 				return FAILED;
 			}
 			CompilationStatus status = _analyzeEventList(event->ifStatement.thenBody, symbols, hasKey);
